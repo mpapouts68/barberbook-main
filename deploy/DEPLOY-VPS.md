@@ -29,6 +29,55 @@ git add → git commit → git push origin main
 
 ### SSH + clone
 
+GitHub **δεν δέχεται τον κωδικό του λογαριασμού** για `git clone`. Το repo `mpapouts68/peqi` είναι **ιδιωτικό** — χρειάζεστε **deploy key** (προτείνεται) ή **Personal Access Token (PAT)**.
+
+#### Επιλογή Α — Deploy key στο VPS (προτείνεται)
+
+Στο VPS:
+
+```bash
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/peqi_github_clone -C "peqi-vps-clone"
+cat ~/.ssh/peqi_github_clone.pub
+```
+
+Στο GitHub: **https://github.com/mpapouts68/peqi → Settings → Deploy keys → Add deploy key**  
+- Title: `peqi-vps`  
+- Key: επικόλληση του `.pub`  
+- **Allow write access**: off (μόνο clone/pull)
+
+Στο VPS:
+
+```bash
+cat >> ~/.ssh/config << 'EOF'
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/peqi_github_clone
+  IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+ssh -T git@github.com   # πρέπει να δείτε "successfully authenticated"
+```
+
+#### Επιλογή Β — Personal Access Token (HTTPS)
+
+1. GitHub → **Settings → Developer settings → Personal access tokens** → fine-grained ή classic με scope **repo**  
+2. Clone — όταν ζητήσει password, επικολλήστε το **token** (όχι τον κωδικό GitHub):
+
+```bash
+git clone https://github.com/mpapouts68/peqi.git peqi
+# Username: mpapouts68
+# Password: <το PAT>
+```
+
+#### Επιλογή Γ — Δημόσιο repo (χωρίς auth στο clone)
+
+**Settings → General → Danger zone → Change visibility → Public** (μόνο αν δεν υπάρχουν secrets στο ιστορικό — το `.env` δεν είναι στο repo).
+
+---
+
+Μετά το auth, εγκατάσταση και clone:
+
 ```bash
 ssh root@YOUR_PEQI_VPS_IP
 
@@ -38,9 +87,12 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt install -y nodejs
 npm install -g pm2
 
-mkdir -p /var/www/peqi
-cd /var/www/peqi
-git clone https://github.com/mpapouts68/peqi.git .
+cd /var/www
+# Αν υπάρχει ημιτελές clone από προηγούμενη προσπάθεια:
+# rm -rf peqi
+git clone git@github.com:mpapouts68/peqi.git peqi
+# ή με PAT: git clone https://github.com/mpapouts68/peqi.git peqi
+cd peqi
 
 cp deploy/env.production.example .env
 nano .env   # BASE_URL, SESSION_SECRET, EMAIL_*, κ.λπ.
