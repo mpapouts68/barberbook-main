@@ -7,6 +7,7 @@ import { sendNamedayGreetings } from "./services/notifications";
 import { checkAndSendReminders } from "./services/appointmentReminders";
 import { serveStatic, log } from "./utils";
 import { isEmailConfigured } from "./services/email";
+import { isGmailApiConfigured } from "./services/gmailApiMailer";
 import path from "path";
 import fs from "fs";
 
@@ -105,10 +106,14 @@ app.use((req, res, next) => {
   const port = parseInt(process.env.PORT || '5100', 10);
   server.listen(port, () => {
     log(`serving on port ${port}`);
-    if (isEmailConfigured()) {
+    if (isGmailApiConfigured()) {
+      log("email: Gmail API configured (HTTPS — works when VPS blocks SMTP)");
+    } else if (isEmailConfigured()) {
       log("email: SMTP configured (confirmation emails enabled)");
     } else {
-      log("email: EMAIL_USER/EMAIL_PASS missing — confirmation emails disabled");
+      log(
+        "email: not configured — set Gmail API (deploy/GMAIL-API-SETUP.md) or EMAIL_USER/EMAIL_PASS",
+      );
     }
   });
 

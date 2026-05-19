@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { isPlaceholderEmail } from "../utils";
 import { EMAIL_BRAND_FULL } from "./emailBranding";
+import { isGmailApiConfigured, sendViaGmailApi } from "./gmailApiMailer";
 
 function getEmailConfig() {
   return {
@@ -17,12 +18,45 @@ function getEmailConfig() {
 }
 
 export function isEmailConfigured(): boolean {
+  if (isGmailApiConfigured()) {
+    return true;
+  }
   const { user, pass } = getEmailConfig();
   return Boolean(user && pass);
 }
 
 function hasSmtpCredentials(): boolean {
-  return isEmailConfigured();
+  const { user, pass } = getEmailConfig();
+  return Boolean(user && pass);
+}
+
+type MailPayload = {
+  from: string;
+  to: string;
+  subject: string;
+  html: string;
+  text?: string;
+};
+
+async function deliverMail(
+  mail: MailPayload,
+  devLabel?: string,
+): Promise<void> {
+  if (isGmailApiConfigured()) {
+    const id = await sendViaGmailApi(mail);
+    console.log(`✅ Email sent via Gmail API (${id}) → ${mail.to}`);
+    return;
+  }
+
+  if (!hasSmtpCredentials()) {
+    if (devLabel) {
+      console.log(`📧 [DEV MODE] ${devLabel}:`, mail.to, mail.subject);
+    }
+    return;
+  }
+
+  const info = await getTransporter().sendMail(mail);
+  console.log(`✅ Email sent via SMTP (${info.messageId}) → ${mail.to}`);
 }
 
 // Create email transporter
@@ -47,12 +81,20 @@ function getTransporter(): Transporter {
       socketTimeout: 10000,
     });
 
-    if (process.env.NODE_ENV === "production" && cfg.user && cfg.pass) {
+    if (
+      process.env.NODE_ENV === "production" &&
+      cfg.user &&
+      cfg.pass &&
+      !isGmailApiConfigured()
+    ) {
       transporter
         .verify()
         .then(() => console.log("✅ Email SMTP verified:", cfg.user))
         .catch((error) => {
           console.error("❌ Email SMTP verification failed:", error.message);
+          console.error(
+            "   On VPS with blocked SMTP use Gmail API: see deploy/GMAIL-API-SETUP.md",
+          );
         });
     }
   }
@@ -133,19 +175,7 @@ export async function sendVerificationEmail(
   };
 
   try {
-    if (!hasSmtpCredentials()) {
-      // Development mode - log email instead of sending
-      console.log("📧 [DEV MODE] Verification Email:");
-      console.log(`To: ${email}`);
-      console.log(`Subject: ${mailOptions.subject}`);
-      console.log(`Verification URL: ${verificationUrl}`);
-      console.log("---");
-      return; // Exit early in dev mode
-    }
-    
-    // Production mode - send real email
-    await getTransporter().sendMail(mailOptions);
-    console.log(`✅ Verification email sent to ${email}`);
+    await deliverMail(mailOptions, "Verification email");
   } catch (error: any) {
     console.error("❌ Failed to send verification email:", error);
     // In production, throw error; in dev, just log
@@ -235,19 +265,7 @@ export async function sendPasswordResetEmail(
   };
 
   try {
-    if (!hasSmtpCredentials()) {
-      // Development mode - log email instead of sending
-      console.log("📧 [DEV MODE] Password Reset Email:");
-      console.log(`To: ${email}`);
-      console.log(`Subject: ${mailOptions.subject}`);
-      console.log(`Reset URL: ${resetUrl}`);
-      console.log("---");
-      return; // Exit early in dev mode
-    }
-    
-    // Production mode - send real email
-    await getTransporter().sendMail(mailOptions);
-    console.log(`✅ Password reset email sent to ${email}`);
+    await deliverMail(mailOptions, "Password reset email");
   } catch (error: any) {
     console.error("❌ Failed to send password reset email:", error);
     // In production, throw error; in dev, just log
@@ -331,17 +349,7 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
   };
 
   try {
-    if (!hasSmtpCredentials()) {
-      console.log("📧 [DEV MODE] Welcome Email:");
-      console.log(`To: ${email}`);
-      console.log(`Subject: ${mailOptions.subject}`);
-      console.log("---");
-      return; // Exit early in dev mode
-    }
-    
-    // Production mode - send real email
-    await getTransporter().sendMail(mailOptions);
-    console.log(`✅ Welcome email sent to ${email}`);
+    await deliverMail(mailOptions, "Welcome email");
   } catch (error: any) {
     console.error("❌ Failed to send welcome email:", error);
     // Don't throw error for welcome email - it's not critical, but log in production
@@ -413,12 +421,7 @@ export async function sendBroadcastNotificationEmail(
   };
 
   try {
-    if (!hasSmtpCredentials()) {
-      console.log("📧 [DEV MODE] Broadcast email:", to, title);
-      return;
-    }
-    await getTransporter().sendMail(mailOptions);
-    console.log(`✅ Broadcast email sent to ${to}`);
+    await deliverMail(mailOptions, "Broadcast email");
   } catch (error: unknown) {
     console.error(`❌ Broadcast email failed for ${to}:`, error);
   }
@@ -528,20 +531,7 @@ export async function sendAppointmentConfirmationEmail(
   };
 
   try {
-    if (!hasSmtpCredentials()) {
-      // Development mode - log email instead of sending
-      console.log("📧 [DEV MODE] Appointment Confirmation Email:");
-      console.log(`To: ${email}`);
-      console.log(`Subject: ${mailOptions.subject}`);
-      console.log(`Date: ${formattedDate}, Time: ${formattedTime}`);
-      console.log(`Service: ${serviceName}, Barber: ${barberName}`);
-      console.log("---");
-      return; // Exit early in dev mode
-    }
-    
-    // Production mode - send real email using the same transporter
-    await getTransporter().sendMail(mailOptions);
-    console.log(`✅ Appointment confirmation email sent to ${email}`);
+    await deliverMail(mailOptions, "Appointment confirmation");
   } catch (error: any) {
     console.error("❌ Failed to send appointment confirmation email:", error);
     // Don't throw error - appointment creation should not fail if email fails
@@ -623,13 +613,7 @@ export async function sendAppointmentCancellationEmail(
   };
 
   try {
-    if (!hasSmtpCredentials()) {
-      console.log("📧 [DEV MODE] Appointment Cancellation Email:");
-      console.log(`To: ${email}, Subject: ${mailOptions.subject}`);
-      return;
-    }
-    await getTransporter().sendMail(mailOptions);
-    console.log(`✅ Cancellation email sent to ${email}`);
+    await deliverMail(mailOptions, "Appointment cancellation");
   } catch (error: any) {
     console.error("❌ Failed to send cancellation email:", error);
   }
@@ -743,20 +727,7 @@ export async function sendSameDayReminderEmail(
   };
 
   try {
-    if (!hasSmtpCredentials()) {
-      // Development mode - log email instead of sending
-      console.log("📧 [DEV MODE] Same-Day Reminder Email:");
-      console.log(`To: ${email}`);
-      console.log(`Subject: ${mailOptions.subject}`);
-      console.log(`Date: ${formattedDate}, Time: ${formattedTime}`);
-      console.log(`Service: ${serviceName}, Barber: ${barberName}`);
-      console.log("---");
-      return; // Exit early in dev mode
-    }
-    
-    // Production mode - send real email using the same transporter
-    await getTransporter().sendMail(mailOptions);
-    console.log(`✅ Same-day reminder email sent to ${email}`);
+    await deliverMail(mailOptions, "Same-day reminder");
   } catch (error: any) {
     console.error("❌ Failed to send same-day reminder email:", error);
     // Don't throw error - reminder should not fail if email fails

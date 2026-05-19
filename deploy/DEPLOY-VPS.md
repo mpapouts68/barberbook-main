@@ -155,34 +155,33 @@ git push origin main
 
 ### Email επιβεβαίωσης ραντεβού
 
-Στο `/var/www/peqi/.env` **υποχρεωτικά**:
+Στο Hostman VPS το **SMTP (587/465) συνήθως μπλοκάρεται** — timeout στο `node scripts/test-email.cjs`.  
+Χρησιμοποίησε **Gmail API (HTTPS)** — οδηγίες: **`deploy/GMAIL-API-SETUP.md`**.
+
+Στο `/var/www/peqi/.env`:
 
 ```env
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=peqihaircutstudio@gmail.com
-EMAIL_PASS=xxxx xxxx xxxx xxxx
+EMAIL_USE_GMAIL_API=true
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GMAIL_REFRESH_TOKEN=...
 EMAIL_FROM="PEQI Haircut Studio <peqihaircutstudio@gmail.com>"
+EMAIL_USER=peqihaircutstudio@gmail.com
 BASE_URL=https://peqi.hair
 ```
 
-`EMAIL_PASS` = [Gmail App Password](https://myaccount.google.com/apppasswords) (όχι τον κωδικό λογαριασμού).
+Τοπικά (αν δουλεύει SMTP): `EMAIL_PASS` = [App Password](https://myaccount.google.com/apppasswords) χωρίς `EMAIL_USE_GMAIL_API`.
 
 Μετά deploy:
 
 ```bash
 cd /var/www/peqi
-# Prefer plain node on VPS (tsx can hang; SMTP verify may timeout ~15s)
 node scripts/test-email.cjs your-inbox@gmail.com
-
-# If port 587 is blocked by Hostman, test connectivity:
-nc -zv smtp.gmail.com 587
-# Try SSL port in .env: EMAIL_PORT=465
-
+pm2 reload deploy/ecosystem.config.cjs --update-env
 pm2 logs peqi --lines 30
 ```
 
-Στα logs πρέπει: `email: SMTP configured` και `✅ Email SMTP verified`.
+Στα logs: `email: Gmail API configured` (VPS) ή `email: SMTP configured` (local).
 
 PM2 φορτώνει το `.env` μέσω `deploy/ecosystem.config.cjs` — μετά αλλαγή `.env`: `pm2 reload deploy/ecosystem.config.cjs --update-env`.
 
