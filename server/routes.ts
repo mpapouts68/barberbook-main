@@ -1,0 +1,2867 @@
+import express, { type Express } from "express";
+import { createServer, type Server } from "http";
+import session from "express-session";
+import Database from "better-sqlite3";
+import createSqliteStore from "better-sqlite3-session-store";
+import passport from "passport";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import helmet from "helmet";
+import { storage } from "./storage";
+import {
+  testCalendarAccess,
+  createCalendarEvent,
+  deleteCalendarEvent,
+  getCalendarEvents,
+  reinitializeGoogleCalendar,
+} from "./googleCalendar";
+import { initializeDatabase } from "./database";
+import { setupOAuth } from "./services/oauth";
+import { checkAndSendNamedayGreetings, getTodaysNamedays } from "./services/nameday";
+import { sendPushToAudience } from "./services/notifications";
+import { hashPassword, generateVerificationToken, generateResetToken, sanitizeUser, isTokenExpired } from "./services/auth";
+import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendAppointmentConfirmationEmail, sendAppointmentCancellationEmail } from "./services/email";
+import { validateRegistration, validateLogin, validateForgotPassword, validatePasswordReset, validateRoleUpdate } from "./middleware/validation";
+import { loginLimiter, registrationLimiter, passwordResetLimiter, verificationLimiter } from "./middleware/rateLimiter";
+import { insertAppointmentSchema, insertPushMessageSchema, insertEmployeeSchema, insertCompanyInfoSchema, insertGoogleCalendarConfigSchema, insertOAuthConfigSchema, insertNotificationSchema } from "@shared/schema";
+import { isPlaceholderEmail } from "./utils";
+// Recurring appointments service - will be loaded dynamically if available
+async function getRecurringAppointmentsService() {
+  try {
+    const recurringModule = await import("./services/recurringAppointments");
+    return recurringModule.createRecurringAppointments;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Helper function to add minutes to a time string (HH:MM format)
+function addMinutesToTime(timeStr: string, minutes: number): string {
+  const [hours, mins] = timeStr.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours, mins, 0, 0);
+  date.setMinutes(date.getMinutes() + minutes);
+  
+  return date.toTimeString().slice(0, 5);
+}
+
+// Helper function to check if two time slots overlap
+function timeSlotsOverlap(
+  slot1Start: string, slot1End: string, 
+  slot2Start: string, slot2End: string
+): boolean {
+  const start1 = timeToMinutes(slot1Start);
+  const end1 = timeToMinutes(slot1End);
+  const start2 = timeToMinutes(slot2Start);
+  const end2 = timeToMinutes(slot2End);
+  
+  return start1 < end2 && start2 < end1;
+}
+
+// Helper function to convert HH:MM to minutes from midnight
+function timeToMinutes(timeStr: string): number {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+// Helper to normalize working hours to array format (supports backward compatibility)
+function normalizeWorkingHours(hours: any): Array<{ start: string; end: string }> | null {
+  if (!hours || hours === "closed" || (typeof hours === 'object' && hours.start === 'closed')) {
+    return null;
+  }
+  if (Array.isArray(hours)) {
+    return hours;
+  }
+  // Single range format (backward compatible)
+  if (hours.start && hours.end) {
+    return [hours];
+  }
+  return null;
+}
+
+// Helper to check if a time range is within working hours (supports multiple ranges)
+function isTimeWithinWorkingHours(timeStart: string, timeEnd: string, workingHours: any): boolean {
+  const ranges = normalizeWorkingHours(workingHours);
+  if (!ranges || ranges.length === 0) return false;
+  
+  return ranges.some(range => {
+    return timeStart >= range.start && timeEnd <= range.end;
+  });
+}
+
+// Helper to get all time ranges for a day
+function getWorkingHoursRanges(workingHours: any, dayOfWeek: string): Array<{ start: string; end: string }> | null {
+  // Handle both full day names (monday, tuesday, etc.) and abbreviated (mon, tue, etc.)
+  let dayName = dayOfWeek.toLowerCase();
+
+  // If it's already a full day name, use it directly
+  const fullDayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  if (fullDayNames.includes(dayName)) {
+    const dayConfig = workingHours[dayName];
+    return normalizeWorkingHours(dayConfig);
+  }
+
+  // Otherwise, convert abbreviated to full name (for backward compatibility)
+  const dayMap: Record<string, string> = {
+    'sun': 'sunday',
+    'mon': 'monday',
+    'tue': 'tuesday',
+    'wed': 'wednesday',
+    'thu': 'thursday',
+    'fri': 'friday',
+    'sat': 'saturday'
+  };
+
+  dayName = dayMap[dayName] || dayName;
+  const dayConfig = workingHours[dayName];
+  return normalizeWorkingHours(dayConfig);
+}
+
+// Helper function to intersect two time ranges
+function intersectRanges(range1: { start: string; end: string }, range2: { start: string; end: string }): { start: string; end: string } | null {
+  const [start1Hour, start1Min] = range1.start.split(':').map(Number);
+  const [end1Hour, end1Min] = range1.end.split(':').map(Number);
+  const [start2Hour, start2Min] = range2.start.split(':').map(Number);
+  const [end2Hour, end2Min] = range2.end.split(':').map(Number);
+  
+  const start1 = start1Hour * 60 + start1Min;
+  const end1 = end1Hour * 60 + end1Min;
+  const start2 = start2Hour * 60 + start2Min;
+  const end2 = end2Hour * 60 + end2Min;
+  
+  const intersectStart = Math.max(start1, start2);
+  const intersectEnd = Math.min(end1, end2);
+  
+  if (intersectStart >= intersectEnd) {
+    return null; // No intersection
+  }
+  
+  const startHour = Math.floor(intersectStart / 60);
+  const startMin = intersectStart % 60;
+  const endHour = Math.floor(intersectEnd / 60);
+  const endMin = intersectEnd % 60;
+  
+  return {
+    start: `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}`,
+    end: `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`
+  };
+}
+
+// Helper function to intersect all ranges from two sets
+function intersectRangeSets(ranges1: Array<{ start: string; end: string }>, ranges2: Array<{ start: string; end: string }>): Array<{ start: string; end: string }> {
+  const intersections: Array<{ start: string; end: string }> = [];
+  
+  for (const range1 of ranges1) {
+    for (const range2 of ranges2) {
+      const intersection = intersectRanges(range1, range2);
+      if (intersection) {
+        intersections.push(intersection);
+      }
+    }
+  }
+  
+  // Sort and merge overlapping ranges
+  intersections.sort((a, b) => a.start.localeCompare(b.start));
+  
+  if (intersections.length === 0) return [];
+  
+  const merged: Array<{ start: string; end: string }> = [intersections[0]];
+  for (let i = 1; i < intersections.length; i++) {
+    const current = intersections[i];
+    const last = merged[merged.length - 1];
+    
+    const [currentStartHour, currentStartMin] = current.start.split(':').map(Number);
+    const [lastEndHour, lastEndMin] = last.end.split(':').map(Number);
+    const currentStart = currentStartHour * 60 + currentStartMin;
+    const lastEnd = lastEndHour * 60 + lastEndMin;
+    
+    if (currentStart <= lastEnd) {
+      // Merge overlapping ranges
+      const [currentEndHour, currentEndMin] = current.end.split(':').map(Number);
+      const currentEnd = currentEndHour * 60 + currentEndMin;
+      const newEnd = Math.max(lastEnd, currentEnd);
+      const newEndHour = Math.floor(newEnd / 60);
+      const newEndMin = newEnd % 60;
+      last.end = `${String(newEndHour).padStart(2, '0')}:${String(newEndMin).padStart(2, '0')}`;
+    } else {
+      merged.push(current);
+    }
+  }
+  
+  return merged;
+}
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // Initialize database
+  await initializeDatabase();
+  
+  // Trust proxy (important for nginx reverse proxy)
+  // This allows Express to trust X-Forwarded-* headers from nginx
+  app.set('trust proxy', 1);
+  
+  // Security middleware
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:", "blob:", "http:", "http://localhost:5100"],
+        connectSrc: ["'self'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }));
+  
+  // Setup session
+  // Require SESSION_SECRET in production
+  if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+    throw new Error('SESSION_SECRET must be set in production environment');
+  }
+  
+  // Use SQLite session store - persists across PM2 restarts and works with multiple instances
+  // MemoryStore fails when PM2 runs 2+ instances (each has its own memory → 401 after OAuth)
+  const dbPath = process.env.DATABASE_URL?.replace(/^file:/, "") || "./database.sqlite";
+  const sessionDb = new Database(dbPath);
+  const SqliteStore = createSqliteStore({ Store: session.Store });
+  const sessionStore = new SqliteStore({
+    client: sessionDb,
+    expired: { clear: true, intervalMs: 15 * 60 * 1000 }, // Clean expired every 15 min
+  });
+
+  // Determine if we're behind HTTPS proxy
+  // Check X-Forwarded-Proto header (set by nginx) or NODE_ENV
+  const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true';
+  
+  app.use(session({
+    store: sessionStore,
+    secret: process.env.SESSION_SECRET || "barbershop-secret-key-change-in-production",
+    resave: false,
+    saveUninitialized: false,
+    cookie: { 
+      secure: isSecure, // HTTPS only when secure
+      httpOnly: true, // Prevent XSS attacks
+      sameSite: isSecure ? 'lax' : 'strict', // Use 'lax' for better compatibility with redirects
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      // Important: Set domain if needed (leave undefined for current domain)
+      // domain: '.fadefactory.cloud' // Uncomment if cookies need to work across subdomains
+    }
+  }));
+
+  // Setup passport
+  app.use(passport.initialize());
+  app.use(passport.session());
+  await setupOAuth();
+
+  // Configure multer for file uploads
+  const storage_multer = multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, `avatar-${uniqueSuffix}${path.extname(file.originalname)}`);
+    }
+  });
+
+  const upload = multer({
+    storage: storage_multer,
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB limit
+    },
+    fileFilter: (req, file, cb) => {
+      // Validate MIME type (more secure than extension check)
+      const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+      const allowedExtensions = /\.(jpeg|jpg|png|gif|webp)$/i;
+      
+      const isValidMime = allowedMimes.includes(file.mimetype);
+      const isValidExt = allowedExtensions.test(path.extname(file.originalname));
+      
+      if (isValidMime && isValidExt) {
+        cb(null, true);
+      } else {
+        cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'));
+      }
+    }
+  });
+
+  // Ensure upload directories exist before serving static files
+  const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+  const avatarsDir = path.join(uploadsDir, 'avatars');
+  
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log(`✅ Created uploads directory: ${uploadsDir}`);
+  }
+  if (!fs.existsSync(avatarsDir)) {
+    fs.mkdirSync(avatarsDir, { recursive: true });
+    console.log(`✅ Created avatars directory: ${avatarsDir}`);
+  }
+  
+  // Serve static files from public directory
+  app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads'), {
+    maxAge: '1y', // Cache for 1 year
+    etag: true,
+    setHeaders: (res, filePath) => {
+      // Set proper content type for images
+      if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+        res.setHeader('Content-Type', 'image/jpeg');
+      } else if (filePath.endsWith('.png')) {
+        res.setHeader('Content-Type', 'image/png');
+      } else if (filePath.endsWith('.gif')) {
+        res.setHeader('Content-Type', 'image/gif');
+      } else if (filePath.endsWith('.webp')) {
+        res.setHeader('Content-Type', 'image/webp');
+      }
+    }
+  }));
+
+  // Middleware to check authentication
+  const requireAuth = (req: any, res: any, next: any) => {
+    if (req.isAuthenticated()) {
+      return next();
+    }
+    res.status(401).json({ message: "Authentication required" });
+  };
+
+  // Middleware to check admin role
+  const requireAdmin = (req: any, res: any, next: any) => {
+    if (req.isAuthenticated() && req.user?.role === 'admin') {
+      return next();
+    }
+    res.status(403).json({ message: "Admin access required" });
+  };
+
+  // OAuth Routes
+  app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }));
+  
+  app.get("/api/auth/google/callback", 
+    passport.authenticate("google", { failureRedirect: "/" }),
+    (req, res) => {
+      req.session.save((err: Error) => {
+        if (err) console.error("OAuth session save error:", err);
+        res.redirect("/dashboard");
+      });
+    }
+  );
+
+  app.get("/api/auth/facebook", passport.authenticate("facebook", { scope: ["email"] }));
+  
+  app.get("/api/auth/facebook/callback",
+    passport.authenticate("facebook", { failureRedirect: "/" }),
+    (req, res) => {
+      req.session.save((err: Error) => {
+        if (err) console.error("OAuth session save error:", err);
+        res.redirect("/dashboard");
+      });
+    }
+  );
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.logout((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      if (req.isAuthenticated() && req.user) {
+        // Refresh user data from database to ensure it's up to date
+        const user = await storage.getUser((req.user as any).id);
+        if (user) {
+          res.json(sanitizeUser(user));
+        } else {
+          // User was deleted from database but session still exists
+          req.logout((err) => {
+            if (err) console.error("Logout error:", err);
+          });
+          res.status(401).json({ message: "User not found" });
+        }
+      } else {
+        res.status(401).json({ message: "Not authenticated" });
+      }
+    } catch (error) {
+      console.error("Error in /api/auth/me:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Public endpoint to check OAuth status (no auth required)
+  app.get("/api/oauth/status", async (req, res) => {
+    try {
+      const config = await storage.getOAuthConfig();
+      res.json({
+        googleEnabled: config?.googleEnabled || false,
+        facebookEnabled: config?.facebookEnabled || false,
+      });
+    } catch (error) {
+      res.json({
+        googleEnabled: false,
+        facebookEnabled: false,
+      });
+    }
+  });
+
+  // Registration endpoint
+  app.post("/api/auth/register", registrationLimiter, validateRegistration, async (req, res) => {
+    try {
+      const { email, password, firstName, lastName, birthday, confirmPassword } = req.body;
+      
+      // Additional validation: ensure confirmPassword matches password
+      if (confirmPassword && confirmPassword !== password) {
+        return res.status(400).json({ message: "Passwords do not match" });
+      }
+      
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(409).json({ message: "Email already registered" });
+      }
+      
+      // Hash password
+      const hashedPassword = await hashPassword(password);
+      
+      // Check if this is the first user (make them admin and auto-verify)
+      const allUsers = await storage.getAllUsers();
+      const role = allUsers.length === 0 ? "admin" : "customer";
+      const emailVerified = allUsers.length === 0 ? true : false; // Auto-verify first admin user
+      
+      // Generate verification token only if email needs verification
+      const { token: verificationToken } = emailVerified ? { token: null } : generateVerificationToken();
+      
+      // Create user
+      const user = await storage.createUser({
+        email,
+        password: hashedPassword,
+        firstName,
+        lastName,
+        birthday: birthday || null,
+        verificationToken: verificationToken || null,
+        role,
+        emailVerified,
+      });
+      
+      // Send verification email only if user needs verification
+      if (!emailVerified && verificationToken) {
+        try {
+          await sendVerificationEmail(email, firstName, verificationToken);
+        } catch (emailError) {
+          console.error("Failed to send verification email:", emailError);
+          // Don't fail registration if email fails
+        }
+      } else if (emailVerified) {
+        // First admin user - send welcome email instead
+        try {
+          await sendWelcomeEmail(email, firstName);
+        } catch (emailError) {
+          console.error("Failed to send welcome email:", emailError);
+        }
+      }
+      
+      res.status(201).json({
+        message: "Registration successful! Please check your email to verify your account.",
+        user: sanitizeUser(user)
+      });
+    } catch (error: any) {
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Registration failed", error: error.message });
+    }
+  });
+
+  // Login endpoint
+  app.post("/api/auth/login", loginLimiter, validateLogin, (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) {
+        console.error("Login authentication error:", err);
+        const errorMessage = err?.message || String(err);
+        return res.status(500).json({ 
+          message: "Login failed", 
+          error: process.env.NODE_ENV === 'development' ? errorMessage : undefined 
+        });
+      }
+      
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Invalid credentials" });
+      }
+      
+      req.login(user, (loginErr) => {
+        if (loginErr) {
+          console.error("Session login error:", loginErr);
+          const errorMessage = loginErr?.message || String(loginErr);
+          return res.status(500).json({ 
+            message: "Login failed", 
+            error: process.env.NODE_ENV === 'development' ? errorMessage : undefined 
+          });
+        }
+        
+        res.json({
+          message: "Login successful",
+          user: sanitizeUser(user)
+        });
+      });
+    })(req, res, next);
+  });
+
+  // Email verification endpoint
+  app.get("/api/auth/verify-email/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      
+      // Validate token is not null or empty
+      if (!token || token === "null" || token === "undefined") {
+        return res.status(400).json({ message: "Invalid verification token. Please request a new verification email." });
+      }
+      
+      const user = await storage.getUserByVerificationToken(token);
+      
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired verification token" });
+      }
+      
+      if (user.emailVerified) {
+        return res.status(400).json({ message: "Email already verified" });
+      }
+      
+      // Update user - mark as verified
+      await storage.updateUser(user.id, {
+        emailVerified: true,
+        verificationToken: null,
+      });
+      
+      // Send welcome email
+      try {
+        await sendWelcomeEmail(user.email, user.firstName);
+      } catch (emailError) {
+        console.error("Failed to send welcome email:", emailError);
+      }
+      
+      res.json({ message: "Email verified successfully! You can now log in." });
+    } catch (error) {
+      console.error("Email verification error:", error);
+      res.status(500).json({ message: "Email verification failed" });
+    }
+  });
+
+  // Resend verification email
+  app.post("/api/auth/resend-verification", verificationLimiter, async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      
+      const user = await storage.getUserByEmail(email);
+      
+      if (!user) {
+        // Don't reveal if user exists for security
+        return res.json({ message: "If the email exists, a verification link has been sent" });
+      }
+      
+      if (user.emailVerified) {
+        return res.status(400).json({ message: "Email already verified" });
+      }
+      
+      // Generate new verification token
+      const { token: verificationToken } = generateVerificationToken();
+      
+      await storage.updateUser(user.id, { verificationToken });
+      
+      // Send verification email
+      await sendVerificationEmail(user.email, user.firstName, verificationToken);
+      
+      res.json({ message: "Verification email sent" });
+    } catch (error) {
+      console.error("Resend verification error:", error);
+      res.status(500).json({ message: "Failed to resend verification email" });
+    }
+  });
+
+  // Forgot password endpoint
+  app.post("/api/auth/forgot-password", passwordResetLimiter, validateForgotPassword, async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      const user = await storage.getUserByEmail(email);
+      
+      // Don't reveal if user exists for security
+      if (!user) {
+        return res.json({ message: "If the email exists, a password reset link has been sent" });
+      }
+      
+      // Don't allow password reset for OAuth users
+      if (!user.password) {
+        return res.json({ message: "If the email exists, a password reset link has been sent" });
+      }
+      
+      // Generate reset token
+      const { token: resetToken, expires } = generateResetToken();
+      
+      await storage.updateUser(user.id, {
+        resetPasswordToken: resetToken,
+        resetPasswordExpires: expires,
+      });
+      
+      // Send reset email
+      await sendPasswordResetEmail(user.email, user.firstName, resetToken);
+      
+      res.json({ message: "Password reset link sent to your email" });
+    } catch (error) {
+      console.error("Forgot password error:", error);
+      res.status(500).json({ message: "Failed to process password reset request" });
+    }
+  });
+
+  // Reset password endpoint
+  app.post("/api/auth/reset-password/:token", validatePasswordReset, async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.body;
+      
+      const user = await storage.getUserByResetToken(token);
+      
+      if (!user) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+      
+      // Check if token has expired
+      if (isTokenExpired(user.resetPasswordExpires)) {
+        return res.status(400).json({ message: "Reset token has expired" });
+      }
+      
+      // Hash new password
+      const hashedPassword = await hashPassword(password);
+      
+      // Update password and clear reset token
+      await storage.updateUser(user.id, {
+        password: hashedPassword,
+        resetPasswordToken: null,
+        resetPasswordExpires: null,
+      });
+      
+      res.json({ message: "Password reset successful! You can now log in with your new password." });
+    } catch (error) {
+      console.error("Reset password error:", error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  // User Routes
+  app.get("/api/users", requireAuth, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  // Appointment Routes
+  app.post("/api/appointments", requireAuth, async (req, res) => {
+    try {
+      let appointmentData = insertAppointmentSchema.parse({
+        ...req.body,
+        userId: (req.user as any).id
+      });
+      
+      const requestedStart = appointmentData.time;
+      const requestedEnd = addMinutesToTime(appointmentData.time, appointmentData.duration || 30);
+      
+      // If no specific employee is selected, find the first available employee
+      if (!appointmentData.employeeId || appointmentData.employeeId === "" || appointmentData.employeeId === "550e8400-e29b-41d4-a716-446655440003") {
+        const allEmployees = await storage.getAllEmployees();
+        // Filter to only active employees
+        const activeEmployees = allEmployees.filter(emp => emp.isActive);
+        let assignedEmployee = null;
+        
+        // Check shop working hours first (employees can't work when shop is closed)
+        const shopWorkingHours = await storage.getWorkingHours();
+        const dayOfWeek = new Date(appointmentData.date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+        const shopRanges = getWorkingHoursRanges(shopWorkingHours, dayOfWeek);
+        
+        if (!shopRanges || shopRanges.length === 0) {
+          return res.status(400).json({ message: "Shop is closed on this day" });
+        }
+        
+        // Check if requested time is within shop working hours
+        const isWithinShopHours = shopRanges.some(range => {
+          return requestedStart >= range.start && requestedEnd <= range.end;
+        });
+        
+        if (!isWithinShopHours) {
+          return res.status(400).json({ message: "Requested time is outside shop working hours" });
+        }
+        
+        // Try to find an available employee
+        for (const employee of activeEmployees) {
+          
+          // Use the first matching range for Google Calendar check
+          const matchingRange = shopRanges.find(range => requestedStart >= range.start && requestedEnd <= range.end) || shopRanges[0];
+          const workStart = matchingRange.start;
+          const workEnd = matchingRange.end;
+          
+          // Check for conflicts with existing appointments
+          const existingAppointments = await storage.getAppointmentsByEmployeeAndDate(
+            employee.id, 
+            appointmentData.date
+          );
+          
+          const hasConflict = existingAppointments.some(apt => {
+            if (apt.status === 'cancelled') return false;
+            const aptEnd = addMinutesToTime(apt.time, apt.duration || 30);
+            return timeSlotsOverlap(requestedStart, requestedEnd, apt.time, aptEnd);
+          });
+          
+          // Also check Google Calendar if enabled
+          if (!hasConflict && employee.googleCalendarEnabled && employee.googleCalendarId) {
+            try {
+              const timeMin = `${appointmentData.date}T${workStart}:00.000Z`;
+              const timeMax = `${appointmentData.date}T${workEnd}:00.000Z`;
+              const calendarEvents = await getCalendarEvents(employee.googleCalendarId, timeMin, timeMax);
+              
+              const hasCalendarConflict = calendarEvents.some(event => {
+                if (!event.start?.dateTime || !event.end?.dateTime) return false;
+                const eventStart = new Date(event.start.dateTime);
+                const eventEnd = new Date(event.end.dateTime);
+                const eventStartTime = eventStart.toTimeString().slice(0, 5);
+                const eventEndTime = eventEnd.toTimeString().slice(0, 5);
+                return timeSlotsOverlap(requestedStart, requestedEnd, eventStartTime, eventEndTime);
+              });
+              
+              if (hasCalendarConflict) {
+                continue; // This employee has a calendar conflict
+              }
+            } catch (calendarError) {
+              console.warn(`Failed to check Google Calendar for employee ${employee.id}:`, calendarError);
+              // Continue anyway - assume available if calendar check fails
+            }
+          }
+          
+          if (!hasConflict) {
+            assignedEmployee = employee;
+            break; // Found an available employee
+          }
+        }
+        
+        if (!assignedEmployee) {
+          return res.status(409).json({ 
+            message: "Δεν υπάρχει διαθέσιμος υπάλληλος για αυτή την ώρα. Παρακαλώ επιλέξτε άλλη ώρα." 
+          });
+        }
+        
+        // Assign the found employee
+        appointmentData.employeeId = assignedEmployee.id;
+        appointmentData.barber = assignedEmployee.name;
+        console.log(`✅ Assigned appointment to first available employee: ${assignedEmployee.name}`);
+      }
+      
+      // Get employee for calendar sync and recurring appointments
+      const employee = await storage.getEmployee(appointmentData.employeeId);
+      if (!employee) {
+        return res.status(400).json({ message: "Employee not found" });
+      }
+      
+      const appointment = await storage.createAppointment(appointmentData);
+      
+      // Sync with Google Calendar if employee has calendar configured
+      if (appointment.employeeId && employee) {
+        try {
+          if (employee && employee.googleCalendarEnabled && employee.googleCalendarId) {
+            const user = await storage.getUser((req.user as any).id);
+            
+            // Get service name for calendar event
+            const serviceData = await storage.getService(appointment.service);
+            const serviceName = serviceData?.name || appointment.service;
+            
+            // Create calendar event
+            const startDateTime = `${appointment.date}T${appointment.time}:00`;
+            const appointmentDateTime = new Date(startDateTime);
+            const endDateTime = new Date(appointmentDateTime.getTime() + (appointment.duration || 30) * 60000);
+            
+            const eventData = {
+              summary: `${serviceName} - ${user?.firstName || 'Client'}`,
+              description: `Ραντεβού κουρείου\nΥπηρεσία: ${serviceName}\nΠελάτης: ${user?.firstName || 'Client'} ${user?.lastName || ''}${user?.email && !isPlaceholderEmail(user.email) ? `\nEmail: ${user.email}` : ''}${user?.phone ? `\nΤηλέφωνο: ${user.phone}` : ''}${appointment.notes ? `\nΣημειώσεις: ${appointment.notes}` : ''}`,
+              start: {
+                dateTime: appointmentDateTime.toISOString(),
+                timeZone: 'Europe/Athens'
+              },
+              end: {
+                dateTime: endDateTime.toISOString(),
+                timeZone: 'Europe/Athens'
+              }
+              // Removed attendees to avoid Domain-Wide Delegation requirement
+            };
+            
+            const calendarEvent = await createCalendarEvent(employee.googleCalendarId, eventData);
+            
+            // Update appointment with calendar event ID
+            if (calendarEvent.id) {
+              await storage.updateAppointment(appointment.id, {
+                notes: appointment.notes
+              });
+              appointment.googleEventId = calendarEvent.id;
+            }
+            
+            console.log(`📅 Calendar event created for appointment ${appointment.id}: ${calendarEvent.id}`);
+          }
+        } catch (calendarError: any) {
+          console.error('Failed to sync appointment with calendar:', calendarError?.message || calendarError);
+          // Don't fail the appointment creation if calendar sync fails
+          // Log the specific error for debugging
+          if (calendarError?.cause?.message) {
+            console.error('Calendar sync error details:', calendarError.cause.message);
+          }
+        }
+      }
+      
+      // Handle recurring appointments
+      if (appointmentData.isRecurring && appointmentData.recurringPattern) {
+        try {
+          const employeeForRecurring = await storage.getEmployee(appointment.employeeId);
+          if (!employeeForRecurring) {
+            throw new Error('Employee not found for recurring appointment');
+          }
+          
+          const createRecurringAppointments = await getRecurringAppointmentsService();
+          if (!createRecurringAppointments) {
+            return res.status(400).json({ 
+              success: false,
+              message: "Recurring appointments feature not available" 
+            });
+          }
+          
+          const recurringAppointments = await createRecurringAppointments(
+            appointment,
+            appointmentData.recurringPattern as 'weekly' | 'biweekly' | 'monthly',
+            appointmentData.recurringInterval || 1,
+            appointmentData.recurringEndDate || null,
+            employeeForRecurring
+          );
+          
+          // Create notification for recurring appointment series
+          await storage.createNotification({
+            userId: (req.user as any).id,
+            type: 'appointment_created',
+            title: 'Επαναλαμβανόμενο Ραντεβού',
+            message: `Δημιουργήθηκε επαναλαμβανόμενο ραντεβού. Δημιουργήθηκαν ${recurringAppointments.length} μελλοντικά ραντεβού.`,
+            link: `/appointments`
+          });
+          
+          res.json({ 
+            appointment, 
+            recurringCount: recurringAppointments.length,
+            message: `Created recurring appointment series with ${recurringAppointments.length} future appointments`
+          });
+          return;
+        } catch (recurringError: any) {
+          console.error('Failed to create recurring appointments:', recurringError);
+          // Continue with single appointment if recurring fails
+        }
+      }
+      
+      // Create notification for single appointment
+      try {
+        await storage.createNotification({
+          userId: (req.user as any).id,
+          type: 'appointment_created',
+          title: 'Νέο Ραντεβού',
+          message: `Το ραντεβού σας για ${appointment.date} στις ${appointment.time} έχει δημιουργηθεί.`,
+          link: `/appointments`
+        });
+      } catch (notifError) {
+        console.error('Failed to create notification:', notifError);
+      }
+      
+      // Send confirmation email
+      try {
+        const user = await storage.getUser((req.user as any).id);
+        if (user && user.email) {
+          // Check if user has email notifications enabled (default to true)
+          let emailEnabled = true;
+          try {
+            const prefs = user.notificationPreferences 
+              ? JSON.parse(user.notificationPreferences) 
+              : { email: true };
+            emailEnabled = prefs.email !== false;
+          } catch (e) {
+            // Default to enabled if preferences are invalid
+          }
+          
+          if (emailEnabled) {
+            const serviceData = await storage.getService(appointment.service);
+            const serviceName = serviceData?.name || appointment.service;
+            
+            await sendAppointmentConfirmationEmail(
+              user.email,
+              user.firstName,
+              appointment.date,
+              appointment.time,
+              serviceName,
+              appointment.barber || employee.name,
+              appointment.duration
+            );
+          }
+        }
+      } catch (emailError) {
+        console.error('Failed to send confirmation email:', emailError);
+        // Don't fail appointment creation if email fails
+      }
+      
+      res.json(appointment);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid appointment data", error });
+    }
+  });
+
+  app.get("/api/appointments", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const appointments = await storage.getAppointmentsByUser(userId);
+      res.json(appointments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch appointments" });
+    }
+  });
+
+  app.get("/api/appointments/all", requireAuth, async (req, res) => {
+    try {
+      const appointments = await storage.getAllAppointments();
+      res.json(appointments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch all appointments" });
+    }
+  });
+
+  // Admin endpoint: Create appointment manually (for phone calls, etc.)
+  app.post("/api/admin/appointments", requireAdmin, async (req, res) => {
+    try {
+      const { userId, employeeId, service, barber, date, time, notes, duration, status, 
+              clientFirstName, clientLastName, clientEmail, clientPhone } = req.body;
+      
+      // Validate required fields - either userId OR client info must be provided
+      // Email is optional for unregistered clients (walk-ins)
+      if ((!userId && !clientFirstName) || !service || !date || !time) {
+        return res.status(400).json({ 
+          message: "Missing required fields: Either userId OR clientFirstName plus service, date, and time are required" 
+        });
+      }
+
+      let user;
+      if (userId) {
+        // Registered client - verify user exists
+        user = await storage.getUser(userId);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+      } else {
+        // Unregistered client - create or find user account
+        if (clientEmail) {
+          // Check if user with this email already exists
+          const existingUser = await storage.getUserByEmail(clientEmail);
+          if (existingUser) {
+            user = existingUser;
+          } else {
+            user = await storage.createUser({
+              firstName: clientFirstName,
+              lastName: clientLastName || "",
+              email: clientEmail,
+              phone: clientPhone || "",
+              password: null,
+              role: "customer",
+              emailVerified: false,
+              isActive: true,
+            });
+          }
+        } else {
+          // No email - create walk-in user with placeholder email (required by DB schema)
+          const placeholderEmail = `walk-in-${crypto.randomUUID()}@no-email.local`;
+          user = await storage.createUser({
+            firstName: clientFirstName,
+            lastName: clientLastName || "",
+            email: placeholderEmail,
+            phone: clientPhone || "",
+            password: null,
+            role: "customer",
+            emailVerified: false,
+            isActive: true,
+          });
+        }
+      }
+
+      // Get service details for duration
+      const serviceData = await storage.getService(service);
+      const appointmentDuration = duration || serviceData?.duration || 30;
+
+      const requestedStart = time;
+      const requestedEnd = addMinutesToTime(time, appointmentDuration);
+
+      let finalEmployeeId = employeeId;
+      let finalBarber = barber;
+
+      // If employee is specified, verify they're available
+      if (finalEmployeeId && finalEmployeeId !== "") {
+        const employee = await storage.getEmployee(finalEmployeeId);
+        if (!employee) {
+          return res.status(404).json({ message: "Employee not found" });
+        }
+        if (!employee.isActive) {
+          return res.status(400).json({ message: "Selected employee is not active" });
+        }
+
+        // CRITICAL: Always check shop hours first, then intersect with employee hours
+        // Employee can only work when shop is also open
+        const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+        
+        // Get shop working hours first - shop must be open
+        const shopWorkingHours = await storage.getWorkingHours();
+        const shopRanges = getWorkingHoursRanges(shopWorkingHours, dayOfWeek);
+        
+        if (!shopRanges || shopRanges.length === 0) {
+          return res.status(400).json({ 
+            message: `Shop is closed on ${date}` 
+          });
+        }
+        
+        // Get employee working hours if set
+        let empRanges: Array<{ start: string; end: string }> | null = null;
+        if (employee.workingHours) {
+          try {
+            const empHours = typeof employee.workingHours === 'string' ? JSON.parse(employee.workingHours) : employee.workingHours;
+            empRanges = getWorkingHoursRanges(empHours, dayOfWeek);
+          } catch (_) {
+            // Parse error, will use shop hours only
+          }
+        }
+        
+        // Intersect employee hours with shop hours
+        let ranges: Array<{ start: string; end: string }>;
+        if (empRanges && empRanges.length > 0) {
+          // Employee has hours - intersect with shop hours
+          ranges = intersectRangeSets(shopRanges, empRanges);
+          if (ranges.length === 0) {
+            return res.status(400).json({ 
+              message: `Employee ${employee.name} is not working on ${date} (no overlap with shop hours)` 
+            });
+          }
+        } else {
+          // No employee hours - use shop hours only
+          ranges = shopRanges;
+        }
+        
+        // Validate requested time is within the intersected ranges
+        const isWithinHours = ranges.some(range => {
+          return requestedStart >= range.start && requestedEnd <= range.end;
+        });
+
+        if (!isWithinHours) {
+          return res.status(400).json({ 
+            message: `Requested time ${time} is outside available hours (shop hours: ${shopRanges.map(r => `${r.start}-${r.end}`).join(', ')})` 
+          });
+        }
+
+        // Check for conflicts
+        const existingAppointments = await storage.getAppointmentsByEmployeeAndDate(
+          finalEmployeeId, 
+          date
+        );
+        
+        const hasConflict = existingAppointments.some(apt => {
+          if (apt.status === 'cancelled') return false;
+          const aptEnd = addMinutesToTime(apt.time, apt.duration || 30);
+          return timeSlotsOverlap(requestedStart, requestedEnd, apt.time, aptEnd);
+        });
+
+        if (hasConflict) {
+          return res.status(409).json({ 
+            message: `Employee ${employee.name} already has an appointment at ${time}` 
+          });
+        }
+
+        // Check Google Calendar if enabled (using employee's working hours ranges)
+        if (employee.googleCalendarEnabled && employee.googleCalendarId) {
+          try {
+            const matchingRange = ranges.find((range: any) => requestedStart >= range.start && requestedEnd <= range.end) || ranges[0];
+            // Create proper ISO datetime with timezone
+            const timezoneOffsetMinutes = new Date().getTimezoneOffset();
+            const offsetHours = Math.floor(Math.abs(timezoneOffsetMinutes) / 60);
+            const offsetMinutes = Math.abs(timezoneOffsetMinutes) % 60;
+            const offsetSign = timezoneOffsetMinutes <= 0 ? '+' : '-';
+            const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+            const timeMin = `${date}T${matchingRange.start}:00${offsetStr}`;
+            const timeMax = `${date}T${matchingRange.end}:00${offsetStr}`;
+            const calendarEvents = await getCalendarEvents(employee.googleCalendarId, timeMin, timeMax);
+            
+            const hasCalendarConflict = calendarEvents.some(event => {
+              if (!event.start?.dateTime || !event.end?.dateTime) return false;
+              const eventStart = new Date(event.start.dateTime);
+              const eventEnd = new Date(event.end.dateTime);
+              const eventStartTime = eventStart.toTimeString().slice(0, 5);
+              const eventEndTime = eventEnd.toTimeString().slice(0, 5);
+              return timeSlotsOverlap(requestedStart, requestedEnd, eventStartTime, eventEndTime);
+            });
+            
+            if (hasCalendarConflict) {
+              return res.status(409).json({ 
+                message: `Employee ${employee.name} has a calendar conflict at ${time}` 
+              });
+            }
+          } catch (calendarError) {
+            console.warn(`Failed to check Google Calendar for employee ${finalEmployeeId}:`, calendarError);
+            // Continue anyway - admin override
+          }
+        }
+
+        finalBarber = employee.name;
+      } else {
+        // Auto-assign employee (same logic as regular appointment creation)
+        // First check shop working hours (employees can't work when shop is closed)
+        const shopWorkingHours = await storage.getWorkingHours();
+        const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+        const shopRanges = getWorkingHoursRanges(shopWorkingHours, dayOfWeek);
+        
+        if (!shopRanges || shopRanges.length === 0) {
+          return res.status(400).json({ message: "Shop is closed on this day" });
+        }
+        
+        const isWithinShopHours = shopRanges.some(range => {
+          return requestedStart >= range.start && requestedEnd <= range.end;
+        });
+        
+        if (!isWithinShopHours) {
+          return res.status(400).json({ message: "Requested time is outside shop working hours" });
+        }
+        
+        const allEmployees = await storage.getAllEmployees();
+        const activeEmployees = allEmployees.filter(emp => emp.isActive);
+        let assignedEmployee = null;
+        
+        for (const employee of activeEmployees) {
+          
+          const existingAppointments = await storage.getAppointmentsByEmployeeAndDate(
+            employee.id, 
+            date
+          );
+          
+          const hasConflict = existingAppointments.some(apt => {
+            if (apt.status === 'cancelled') return false;
+            const aptEnd = addMinutesToTime(apt.time, apt.duration || 30);
+            return timeSlotsOverlap(requestedStart, requestedEnd, apt.time, aptEnd);
+          });
+          
+          if (!hasConflict) {
+            assignedEmployee = employee;
+            break;
+          }
+        }
+        
+        if (!assignedEmployee) {
+          return res.status(409).json({ 
+            message: "No available employee found for this time slot" 
+          });
+        }
+        
+        finalEmployeeId = assignedEmployee.id;
+        finalBarber = assignedEmployee.name;
+      }
+
+      // Create appointment
+      const appointmentData: any = {
+        userId: user.id, // Use the user object (either existing or newly created)
+        employeeId: finalEmployeeId,
+        service,
+        barber: finalBarber,
+        date,
+        time,
+        notes: notes || "",
+        duration: appointmentDuration,
+        status: status || "confirmed" // Default to confirmed for admin-created appointments
+      };
+
+      const appointment = await storage.createAppointment(appointmentData);
+
+      // Send confirmation email (skip for walk-ins without real email)
+      try {
+        if (user && user.email && !isPlaceholderEmail(user.email)) {
+          // Check if user has email notifications enabled (default to true)
+          let emailEnabled = true;
+          try {
+            const prefs = user.notificationPreferences 
+              ? JSON.parse(user.notificationPreferences) 
+              : { email: true };
+            emailEnabled = prefs.email !== false;
+          } catch (e) {
+            // Default to enabled if preferences are invalid
+          }
+          
+          if (emailEnabled) {
+            const serviceData = await storage.getService(appointment.service);
+            const serviceName = serviceData?.name || appointment.service;
+            const employee = await storage.getEmployee(finalEmployeeId);
+            
+            await sendAppointmentConfirmationEmail(
+              user.email,
+              user.firstName,
+              appointment.date,
+              appointment.time,
+              serviceName,
+              appointment.barber || employee?.name || 'Κομμωτής',
+              appointment.duration
+            );
+          }
+        }
+      } catch (emailError) {
+        console.error('Failed to send confirmation email:', emailError);
+        // Don't fail appointment creation if email fails
+      }
+
+      // Sync with Google Calendar if enabled
+      const employee = await storage.getEmployee(finalEmployeeId);
+      if (employee?.googleCalendarEnabled && employee?.googleCalendarId) {
+        try {
+          // Get service name for calendar event
+          const serviceData = await storage.getService(appointment.service);
+          const serviceName = serviceData?.name || appointment.service;
+          
+          // Use the user object we already have
+          const appointmentUser = user;
+          
+          // Create calendar event with proper format
+          const startDateTime = `${appointment.date}T${appointment.time}:00`;
+          const appointmentDateTime = new Date(startDateTime);
+          const endDateTime = new Date(appointmentDateTime.getTime() + (appointment.duration || 30) * 60000);
+          
+          const eventData = {
+            summary: `${serviceName} - ${appointmentUser?.firstName || 'Client'}`,
+            description: `Ραντεβού κουρείου\nΥπηρεσία: ${serviceName}\nΠελάτης: ${appointmentUser?.firstName || 'Client'} ${appointmentUser?.lastName || ''}${appointmentUser?.email && !isPlaceholderEmail(appointmentUser.email) ? `\nEmail: ${appointmentUser.email}` : ''}${appointmentUser?.phone ? `\nΤηλέφωνο: ${appointmentUser.phone}` : ''}${appointment.notes ? `\nΣημειώσεις: ${appointment.notes}` : ''}`,
+            start: {
+              dateTime: appointmentDateTime.toISOString(),
+              timeZone: 'Europe/Athens'
+            },
+            end: {
+              dateTime: endDateTime.toISOString(),
+              timeZone: 'Europe/Athens'
+            }
+          };
+          
+          const calendarEvent = await createCalendarEvent(employee.googleCalendarId, eventData);
+          await storage.updateAppointment(appointment.id, { googleEventId: calendarEvent.id });
+        } catch (calendarError) {
+          console.warn("Failed to sync appointment with Google Calendar:", calendarError);
+          // Don't fail the request if calendar sync fails
+        }
+      }
+
+      res.status(201).json({
+        success: true,
+        appointment,
+        message: `Appointment created successfully for ${user.firstName} ${user.lastName}`
+      });
+    } catch (error: any) {
+      console.error("Error creating manual appointment:", error);
+      res.status(500).json({ 
+        message: error.message || "Failed to create appointment" 
+      });
+    }
+  });
+
+  app.get("/api/appointments/today", requireAuth, async (req, res) => {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const appointments = await storage.getAppointmentsByDate(today);
+      res.json(appointments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch today's appointments" });
+    }
+  });
+
+  // Get appointments by specific date (for TV display - no auth required)
+  app.get("/api/appointments/date/:date", async (req, res) => {
+    try {
+      const { date } = req.params;
+      
+      // Get database appointments
+      const dbAppointments = await storage.getAppointmentsByDate(date);
+      
+      // Enrich with client names for display (TV display and others)
+      const enrichedAppointments = await Promise.all(dbAppointments.map(async (apt) => {
+        const user = apt.userId ? await storage.getUser(apt.userId) : undefined;
+        return {
+          ...apt,
+          clientFirstName: user?.firstName,
+          clientLastName: user?.lastName,
+        };
+      }));
+      
+      // Get all employees to check for Google Calendar integration
+      const employees = await storage.getAllEmployees();
+      const googleCalendarAppointments: any[] = [];
+      
+      // Fetch Google Calendar events for employees with calendar enabled
+      for (const employee of employees) {
+        if (employee.googleCalendarEnabled && employee.googleCalendarId && employee.isActive) {
+          try {
+            // Get shop-wide working hours (NOT per-employee - all employees use same shop hours)
+            const shopWorkingHours = await storage.getWorkingHours();
+            const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+            const ranges = getWorkingHoursRanges(shopWorkingHours, dayOfWeek);
+            
+            if (ranges && ranges.length > 0) {
+              // Get the earliest start and latest end across all ranges
+              const allStarts = ranges.map(r => r.start).sort();
+              const allEnds = ranges.map(r => r.end).sort();
+              
+              // Create proper ISO 8601 datetime strings with local timezone
+              const timezoneOffsetMinutes = new Date().getTimezoneOffset();
+              const offsetHours = Math.floor(Math.abs(timezoneOffsetMinutes) / 60);
+              const offsetMinutes = Math.abs(timezoneOffsetMinutes) % 60;
+              const offsetSign = timezoneOffsetMinutes <= 0 ? '+' : '-';
+              const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+              
+              const timeMin = `${date}T${allStarts[0]}:00${offsetStr}`;
+              const timeMax = `${date}T${allEnds[allEnds.length - 1]}:00${offsetStr}`;
+              
+              const calendarEvents = await getCalendarEvents(employee.googleCalendarId, timeMin, timeMax);
+              
+              // Convert Google Calendar events to appointment-like objects
+              for (const event of calendarEvents) {
+                if (event.start?.dateTime && event.end?.dateTime) {
+                  const eventStart = new Date(event.start.dateTime);
+                  const eventEnd = new Date(event.end.dateTime);
+                  const eventDate = eventStart.toISOString().split('T')[0];
+                  
+                  // Only include events for the requested date
+                  if (eventDate === date) {
+                    const eventStartTime = eventStart.toTimeString().slice(0, 5);
+                    const duration = Math.round((eventEnd.getTime() - eventStart.getTime()) / 60000);
+                    
+                    // Check if this event is already in database (by googleEventId)
+                    const existingAppointment = enrichedAppointments.find(
+                      apt => apt.googleEventId === event.id
+                    );
+                    
+                    // Only add if not already in database
+                    if (!existingAppointment) {
+                      googleCalendarAppointments.push({
+                        id: `google-${event.id}`,
+                        userId: null, // Google Calendar events don't have userId
+                        employeeId: employee.id,
+                        service: event.summary || 'Google Calendar Event',
+                        barber: employee.name,
+                        date: date,
+                        time: eventStartTime,
+                        duration: duration,
+                        notes: event.description || '',
+                        status: 'confirmed',
+                        googleEventId: event.id,
+                        isGoogleCalendarEvent: true, // Flag to identify Google Calendar events
+                        createdAt: eventStart.getTime()
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          } catch (calendarError: any) {
+            console.warn(`⚠️  Failed to fetch Google Calendar events for ${employee.name} on ${date}:`, calendarError.message);
+            // Continue with other employees if one fails
+          }
+        }
+      }
+      
+      // Merge database appointments with Google Calendar events
+      const allAppointments = [...enrichedAppointments, ...googleCalendarAppointments];
+      
+      // Sort by time
+      allAppointments.sort((a, b) => {
+        const timeA = a.time || '00:00';
+        const timeB = b.time || '00:00';
+        return timeA.localeCompare(timeB);
+      });
+      
+      res.json(allAppointments);
+    } catch (error) {
+      console.error("Error fetching appointments by date:", error);
+      res.status(500).json({ message: "Failed to fetch appointments" });
+    }
+  });
+
+  app.put("/api/appointments/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updateData: any = {};
+      
+      // Allow updating status, date, time, duration, notes, employeeId, service
+      if (req.body.status !== undefined) updateData.status = req.body.status;
+      if (req.body.date !== undefined) updateData.date = req.body.date;
+      if (req.body.time !== undefined) updateData.time = req.body.time;
+      if (req.body.duration !== undefined) updateData.duration = req.body.duration;
+      if (req.body.notes !== undefined) updateData.notes = req.body.notes;
+      if (req.body.employeeId !== undefined) updateData.employeeId = req.body.employeeId;
+      if (req.body.service !== undefined) updateData.service = req.body.service;
+      if (req.body.barber !== undefined) updateData.barber = req.body.barber;
+      
+      // Get existing appointment
+      const existingAppointment = await storage.getAppointment(id);
+      if (!existingAppointment) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+      
+      // Check if user owns the appointment or is admin
+      const userId = (req.user as any).id;
+      const userRole = (req.user as any).role;
+      if (existingAppointment.userId !== userId && userRole !== 'admin') {
+        return res.status(403).json({ message: "You can only update your own appointments" });
+      }
+      
+      // Update appointment
+      const updatedAppointment = await storage.updateAppointment(id, updateData);
+      
+      // If date/time/employee changed, sync with Google Calendar
+      if ((updateData.date || updateData.time || updateData.employeeId) && updatedAppointment?.employeeId) {
+        try {
+          const employee = await storage.getEmployee(updatedAppointment.employeeId);
+          if (employee?.googleCalendarEnabled && employee?.googleCalendarId) {
+            const finalDate = updateData.date || existingAppointment.date;
+            const finalTime = updateData.time || existingAppointment.time;
+            const finalDuration = updateData.duration || existingAppointment.duration || 30;
+            
+            // Delete old calendar event if it exists
+            if (existingAppointment.googleEventId) {
+              try {
+                await deleteCalendarEvent(employee.googleCalendarId, existingAppointment.googleEventId);
+              } catch (deleteError) {
+                console.warn('Failed to delete old calendar event:', deleteError);
+              }
+            }
+            
+            // Create new calendar event
+            const user = await storage.getUser(updatedAppointment.userId);
+            const serviceData = await storage.getService(updatedAppointment.service);
+            const serviceName = serviceData?.name || updatedAppointment.service;
+            
+            const startDateTime = `${finalDate}T${finalTime}:00`;
+            const appointmentDateTime = new Date(startDateTime);
+            const endDateTime = new Date(appointmentDateTime.getTime() + finalDuration * 60000);
+            
+            const eventData = {
+              summary: `${serviceName} - ${user?.firstName || 'Client'}`,
+              description: `Ραντεβού κουρείου\nΥπηρεσία: ${serviceName}\nΠελάτης: ${user?.firstName || 'Client'} ${user?.lastName || ''}${user?.email && !isPlaceholderEmail(user.email) ? `\nEmail: ${user.email}` : ''}${user?.phone ? `\nΤηλέφωνο: ${user.phone}` : ''}${updatedAppointment.notes ? `\nΣημειώσεις: ${updatedAppointment.notes}` : ''}`,
+              start: {
+                dateTime: appointmentDateTime.toISOString(),
+                timeZone: 'Europe/Athens'
+              },
+              end: {
+                dateTime: endDateTime.toISOString(),
+                timeZone: 'Europe/Athens'
+              }
+            };
+            
+            const calendarEvent = await createCalendarEvent(employee.googleCalendarId, eventData);
+            await storage.updateAppointment(id, { googleEventId: calendarEvent.id });
+          }
+        } catch (calendarError: any) {
+          console.error('Failed to sync with Google Calendar:', calendarError?.message || calendarError);
+          // Don't fail the update if calendar sync fails
+        }
+      }
+      
+      res.json(updatedAppointment);
+    } catch (error: any) {
+      console.error("Failed to update appointment:", error);
+      res.status(500).json({ message: error.message || "Failed to update appointment" });
+    }
+  });
+
+  app.delete("/api/appointments/:id", requireAuth, async (req, res) => {
+    try {
+      const notifyClient = req.query.notify === "1" || req.query.notify === "true";
+      const appointment = await storage.getAppointment(req.params.id);
+      if (!appointment) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+
+      // If cancel with notification: send email to client, then cancel and sync Google
+      if (notifyClient) {
+        let clientEmail: string | null = null;
+        let clientFirstName = "Πελάτη";
+        if (appointment.userId) {
+          const user = await storage.getUser(appointment.userId);
+          if (user?.email) {
+            clientEmail = user.email;
+            clientFirstName = user.firstName || clientFirstName;
+          }
+        } else if ((appointment as any).clientEmail) {
+          clientEmail = (appointment as any).clientEmail;
+          clientFirstName = (appointment as any).clientFirstName || clientFirstName;
+        }
+        if (clientEmail && !isPlaceholderEmail(clientEmail)) {
+          const serviceData = await storage.getService(appointment.service);
+          const serviceName = serviceData?.name || appointment.service;
+          const barberName = appointment.barber || "—";
+          await sendAppointmentCancellationEmail(
+            clientEmail,
+            clientFirstName,
+            appointment.date,
+            appointment.time || "00:00",
+            serviceName,
+            barberName
+          );
+        }
+      }
+
+      const success = await storage.cancelAppointment(req.params.id);
+      if (success) {
+        // Delete from Google Calendar if it exists
+        if (appointment?.googleEventId && appointment?.employeeId) {
+          try {
+            const employee = await storage.getEmployee(appointment.employeeId);
+            if (employee?.googleCalendarEnabled && employee?.googleCalendarId) {
+              await deleteCalendarEvent(employee.googleCalendarId, appointment.googleEventId);
+              console.log(`🗑️ Calendar event deleted for appointment ${req.params.id}: ${appointment.googleEventId}`);
+            }
+          } catch (calendarError: any) {
+            console.error('Failed to delete calendar event:', calendarError?.message || calendarError);
+          }
+        }
+        res.json({ message: notifyClient ? "Appointment cancelled and client notified" : "Appointment cancelled successfully" });
+      } else {
+        res.status(404).json({ message: "Appointment not found" });
+      }
+    } catch (error) {
+      console.error("Failed to cancel appointment:", error);
+      res.status(500).json({ message: "Failed to cancel appointment" });
+    }
+  });
+
+  // Employee routes
+  app.get("/api/employees", async (req, res) => {
+    try {
+      const employees = await storage.getAllEmployees();
+      // Filter to only return active employees
+      const activeEmployees = employees.filter(emp => emp.isActive !== false);
+      res.json(activeEmployees);
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+      res.status(500).json({ message: "Failed to fetch employees" });
+    }
+  });
+
+  app.post("/api/employees", requireAuth, async (req, res) => {
+    try {
+      const data = insertEmployeeSchema.parse(req.body);
+      const employee = await storage.createEmployee(data);
+      res.json(employee);
+    } catch (error) {
+      console.error("Error creating employee:", error);
+      res.status(400).json({ message: "Failed to create employee" });
+    }
+  });
+
+  app.put("/api/employees/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const data = insertEmployeeSchema.partial().parse(req.body);
+      const employee = await storage.updateEmployee(id, data);
+      res.json(employee);
+    } catch (error) {
+      console.error("Error updating employee:", error);
+      res.status(400).json({ message: "Failed to update employee", error: error.message });
+    }
+  });
+
+  app.post("/api/employees/:id/test-calendar", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const employee = await storage.getEmployee(id);
+      
+      if (!employee || !employee.googleCalendarId) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Employee not found or Google Calendar ID not set" 
+        });
+      }
+
+      const result = await testCalendarAccess(employee.googleCalendarId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error testing calendar access:", error);
+      res.status(500).json({ 
+        success: false, 
+        message: "Failed to test calendar access" 
+      });
+    }
+  });
+
+  app.get("/api/employees/:id", async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      res.json(employee);
+    } catch (error) {
+      console.error("Error fetching employee:", error);
+      res.status(500).json({ message: "Failed to fetch employee" });
+    }
+  });
+
+
+  // Calendar availability routes
+  app.get("/api/employees/:id/availability", async (req, res) => {
+    try {
+      const { date, duration = 30 } = req.query;
+      
+      if (!date || typeof date !== 'string') {
+        return res.status(400).json({ message: "Date parameter is required" });
+      }
+
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      // CRITICAL: Always check shop hours first, then intersect with employee hours
+      // Employee can only work when shop is also open
+      const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
+      
+      // Get shop working hours first - shop must be open
+      const shopWorkingHours = await storage.getWorkingHours();
+      const shopRanges = getWorkingHoursRanges(shopWorkingHours, dayOfWeek);
+      
+      if (!shopRanges || shopRanges.length === 0) {
+        // Shop is closed - no availability
+        return res.json([]);
+      }
+      
+      // Get employee working hours if set
+      let empRanges: Array<{ start: string; end: string }> | null = null;
+      if (employee.workingHours) {
+        try {
+          const empHours = typeof employee.workingHours === 'string' ? JSON.parse(employee.workingHours) : employee.workingHours;
+          empRanges = getWorkingHoursRanges(empHours, dayOfWeek);
+        } catch (_) {
+          // Parse error, will use shop hours only
+        }
+      }
+      
+      // Intersect employee hours with shop hours
+      let ranges: Array<{ start: string; end: string }>;
+      if (empRanges && empRanges.length > 0) {
+        // Employee has hours - intersect with shop hours
+        ranges = intersectRangeSets(shopRanges, empRanges);
+        if (ranges.length === 0) {
+          // No intersection - employee cannot work when shop is closed
+          return res.json([]);
+        }
+      } else {
+        // No employee hours - use shop hours only
+        ranges = shopRanges;
+      }
+
+      // CRITICAL: Check Google Calendar FIRST if employee has it enabled
+      // This ensures appointments added directly to Google Calendar are respected
+      let googleCalendarEvents: any[] = [];
+      if (employee.googleCalendarEnabled && employee.googleCalendarId) {
+        try {
+          // Get the earliest start and latest end across all ranges for Google Calendar query
+          const allStarts = ranges.map(r => r.start).sort();
+          const allEnds = ranges.map(r => r.end).sort();
+          
+          // Create proper ISO 8601 datetime strings with local timezone
+          // Working hours are in local time (HH:MM format), so we need to construct
+          // the datetime string properly. Use the server's local timezone offset.
+          // getTimezoneOffset() returns negative for timezones ahead of UTC (e.g., UTC+2 = -120)
+          // ISO 8601 uses opposite sign convention (UTC+2 = +02:00)
+          const timezoneOffsetMinutes = new Date().getTimezoneOffset();
+          const offsetHours = Math.floor(Math.abs(timezoneOffsetMinutes) / 60);
+          const offsetMinutes = Math.abs(timezoneOffsetMinutes) % 60;
+          const offsetSign = timezoneOffsetMinutes <= 0 ? '+' : '-'; // Invert sign for ISO format
+          const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
+          
+          const timeMin = `${date}T${allStarts[0]}:00${offsetStr}`;
+          const timeMax = `${date}T${allEnds[allEnds.length - 1]}:00${offsetStr}`;
+          
+          googleCalendarEvents = await getCalendarEvents(employee.googleCalendarId, timeMin, timeMax);
+          console.log(`📅 Found ${googleCalendarEvents.length} events in Google Calendar for ${employee.name} on ${date} (ranges: ${ranges.length})`);
+        } catch (calendarError: any) {
+          console.warn(`⚠️  Failed to fetch Google Calendar events for ${employee.name}:`, calendarError.message);
+          // Continue with database-only check if Google Calendar fails
+        }
+      }
+
+      // Get existing appointments from database for this employee and date
+      const existingAppointments = await storage.getAppointmentsByEmployeeAndDate(req.params.id, date);
+      const bookedSlots = existingAppointments
+        .filter(apt => apt.status !== 'cancelled')
+        .map(apt => ({
+          start: apt.time,
+          end: addMinutesToTime(apt.time, apt.duration || 30),
+          duration: apt.duration || 30
+        }));
+
+      // Convert Google Calendar events to booked slots
+      for (const event of googleCalendarEvents) {
+        if (event.start?.dateTime && event.end?.dateTime) {
+          const eventStart = new Date(event.start.dateTime);
+          const eventEnd = new Date(event.end.dateTime);
+          const eventStartTime = eventStart.toTimeString().slice(0, 5);
+          const eventEndTime = eventEnd.toTimeString().slice(0, 5);
+          
+          bookedSlots.push({
+            start: eventStartTime,
+            end: eventEndTime,
+            duration: Math.round((eventEnd.getTime() - eventStart.getTime()) / 60000)
+          });
+        }
+      }
+
+      // Generate all possible time slots across ALL ranges
+      // CRITICAL: Process every range, not just the first one
+      const slots = [];
+      
+      console.log(`🔧 API: Generating slots from ${ranges.length} range(s) for ${employee.name} on ${date}:`, ranges.map(r => `${r.start}-${r.end}`));
+      
+      for (const range of ranges) {
+        if (!range.start || !range.end) {
+          console.warn(`⚠️ Skipping invalid range:`, range);
+          continue;
+        }
+        
+        const startTime = new Date(`${date}T${range.start}:00`);
+        const endTime = new Date(`${date}T${range.end}:00`);
+        
+        if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+          console.warn(`⚠️ Skipping range with invalid times: ${range.start}-${range.end}`);
+          continue;
+        }
+        
+        let currentTime = new Date(startTime);
+        let rangeSlotCount = 0;
+        
+        while (currentTime < endTime) {
+          const slotEnd = new Date(currentTime.getTime() + Number(duration) * 60000);
+          if (slotEnd <= endTime) {
+            const slotStartTime = currentTime.toTimeString().slice(0, 5);
+            const slotEndTime = slotEnd.toTimeString().slice(0, 5);
+            
+            // Check if this slot conflicts with any booked appointments (from database OR Google Calendar)
+            const isAvailable = !bookedSlots.some(bookedSlot => 
+              timeSlotsOverlap(slotStartTime, slotEndTime, bookedSlot.start, bookedSlot.end)
+            );
+            
+            slots.push({
+              start: slotStartTime,
+              end: slotEndTime,
+              available: isAvailable
+            });
+            
+            rangeSlotCount++;
+            currentTime = new Date(currentTime.getTime() + Number(duration) * 60000);
+          } else {
+            break;
+          }
+        }
+        
+        console.log(`  ✅ Range ${range.start}-${range.end}: Generated ${rangeSlotCount} slots`);
+      }
+      
+      // Sort slots by start time
+      slots.sort((a, b) => a.start.localeCompare(b.start));
+      console.log(`📅 API: Total slots generated: ${slots.length} from ${ranges.length} range(s)`);
+
+      res.json(slots);
+    } catch (error) {
+      console.error("Error fetching availability:", error);
+      res.status(500).json({ message: "Failed to fetch availability" });
+    }
+  });
+
+  // Nameday Routes
+  app.get("/api/nameday/check", requireAuth, async (req, res) => {
+    try {
+      const result = await checkAndSendNamedayGreetings();
+      res.json({
+        message: `Nameday greetings sent to ${result.sent} users`,
+        celebratingNames: result.names
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to check namedays" });
+    }
+  });
+
+  app.get("/api/nameday/today", async (req, res) => {
+    try {
+      const names = await getTodaysNamedays();
+      res.json(names);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch today's namedays" });
+    }
+  });
+
+  // Push Notification Routes
+  app.post("/api/push/send", requireAuth, async (req, res) => {
+    try {
+      const messageData = insertPushMessageSchema.parse(req.body);
+      
+      await sendPushToAudience(
+        messageData.title,
+        messageData.body,
+        messageData.audience,
+        undefined
+      );
+      
+      res.json({ message: "Push notification sent successfully" });
+    } catch (error) {
+      res.status(400).json({ message: "Invalid push message data", error });
+    }
+  });
+
+  app.get("/api/push/history", requireAuth, async (req, res) => {
+    try {
+      const messages = await storage.getAllPushMessages();
+      res.json(messages);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch push message history" });
+    }
+  });
+
+  // Settings Routes (Admin only)
+  app.get("/api/settings/:key", requireAdmin, async (req, res) => {
+    try {
+      const setting = await storage.getSetting(req.params.key);
+      if (setting) {
+        res.json(setting);
+      } else {
+        res.status(404).json({ message: "Setting not found" });
+      }
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch setting" });
+    }
+  });
+
+  app.put("/api/settings/:key", requireAdmin, async (req, res) => {
+    try {
+      if (!req.body.value) {
+        return res.status(400).json({ message: "Value is required" });
+      }
+      await storage.updateSetting(req.params.key, req.body.value);
+      res.json({ message: "Setting updated successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update setting" });
+    }
+  });
+
+  // Admin routes
+  app.get("/api/admin/employees", requireAdmin, async (req, res) => {
+    try {
+      const employees = await storage.getAllEmployees();
+      res.json(employees);
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+      res.status(500).json({ message: "Failed to fetch employees" });
+    }
+  });
+
+  // Working hours management
+  app.get("/api/admin/working-hours", async (req, res) => {
+    try {
+      const workingHours = await storage.getWorkingHours();
+      res.json(workingHours);
+    } catch (error) {
+      console.error("Error fetching working hours:", error);
+      res.status(500).json({ error: "Failed to fetch working hours" });
+    }
+  });
+
+  app.put("/api/admin/working-hours", async (req, res) => {
+    try {
+      const workingHours = req.body;
+      await storage.updateWorkingHours(workingHours);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating working hours:", error);
+      res.status(500).json({ error: "Failed to update working hours" });
+    }
+  });
+
+  app.get("/api/appointments/all", requireAdmin, async (req, res) => {
+    try {
+      const appointments = await storage.getAllAppointments();
+      res.json(appointments);
+    } catch (error) {
+      console.error("Error fetching all appointments:", error);
+      res.status(500).json({ message: "Failed to fetch appointments" });
+    }
+  });
+
+  app.post("/api/admin/employees", requireAdmin, async (req, res) => {
+    try {
+      const validatedData = insertEmployeeSchema.parse(req.body);
+      const employee = await storage.createEmployee(validatedData);
+      res.status(201).json(employee);
+    } catch (error: any) {
+      console.error("Error creating employee:", error);
+      res.status(400).json({ message: error.message || "Failed to create employee" });
+    }
+  });
+
+  app.delete("/api/admin/employees/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const employee = await storage.getEmployee(id);
+      if (!employee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      const appts = await storage.getAppointmentsByEmployee(id);
+      if (employee.googleCalendarEnabled && employee.googleCalendarId) {
+        for (const apt of appts) {
+          if (!apt.googleEventId) continue;
+          try {
+            await deleteCalendarEvent(employee.googleCalendarId, apt.googleEventId);
+          } catch (calendarError: unknown) {
+            console.error(
+              "Failed to delete Google Calendar event for appointment",
+              apt.id,
+              calendarError
+            );
+          }
+        }
+      }
+      await storage.deleteEmployee(id);
+      res.status(204).send();
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg === "Employee not found") {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+      console.error("Error deleting employee:", error);
+      res.status(500).json({ message: "Failed to delete employee" });
+    }
+  });
+
+  // Admin user management routes
+  app.get("/api/admin/users", requireAdmin, async (req, res) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      const search = req.query.search as string;
+      const filter = (req.query.filter as "all" | "real_email" | "walk_in") || "all";
+      const sort = (req.query.sort as "name_asc" | "name_desc") || "name_asc";
+
+      const result = await storage.getUsersWithPagination(page, limit, search, filter, sort);
+      
+      // Sanitize all users before sending
+      const sanitizedUsers = result.users.map(user => sanitizeUser(user));
+      
+      res.json({
+        users: sanitizedUsers,
+        total: result.total,
+        page,
+        limit,
+        totalPages: Math.ceil(result.total / limit)
+      });
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.get("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.params.id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      res.json(sanitizeUser(user));
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/role", requireAdmin, validateRoleUpdate, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role } = req.body;
+      
+      // Prevent changing own role
+      const currentUser = req.user as any;
+      if (currentUser.id === id) {
+        return res.status(403).json({ message: "You cannot change your own role" });
+      }
+      
+      const user = await storage.updateUserRole(id, role);
+      res.json({
+        message: "User role updated successfully",
+        user: sanitizeUser(user)
+      });
+    } catch (error) {
+      console.error("Error updating user role:", error);
+      res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/suspend", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Prevent suspending own account
+      const currentUser = req.user as any;
+      if (currentUser.id === id) {
+        return res.status(403).json({ message: "You cannot suspend your own account" });
+      }
+      
+      const user = await storage.suspendUser(id);
+      res.json({
+        message: "User suspended successfully",
+        user: sanitizeUser(user)
+      });
+    } catch (error) {
+      console.error("Error suspending user:", error);
+      res.status(500).json({ message: "Failed to suspend user" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/activate", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      const user = await storage.activateUser(id);
+      res.json({
+        message: "User activated successfully",
+        user: sanitizeUser(user)
+      });
+    } catch (error) {
+      console.error("Error activating user:", error);
+      res.status(500).json({ message: "Failed to activate user" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/verify-email", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Check if user exists
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Check if already verified
+      if (user.emailVerified) {
+        return res.status(400).json({ message: "User email is already verified" });
+      }
+      
+      // Verify the user's email
+      await storage.updateUser(id, {
+        emailVerified: true,
+        verificationToken: null,
+      });
+      
+      // Send welcome email if not already sent
+      try {
+        await sendWelcomeEmail(user.email, user.firstName);
+      } catch (emailError) {
+        console.error("Failed to send welcome email:", emailError);
+        // Don't fail the verification if email fails
+      }
+      
+      const updatedUser = await storage.getUser(id);
+      res.json({
+        message: "User email verified successfully",
+        user: sanitizeUser(updatedUser!)
+      });
+    } catch (error: any) {
+      console.error("Error verifying user email:", error);
+      res.status(500).json({ message: error.message || "Failed to verify user email" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const currentUser = req.user as any;
+      
+      // Prevent deleting own account
+      if (currentUser.id === id) {
+        return res.status(403).json({ message: "You cannot delete your own account" });
+      }
+      
+      // Check if user exists
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Prevent deleting the last admin
+      if (user.role === 'admin') {
+        const allUsers = await storage.getAllUsers();
+        const adminCount = allUsers.filter(u => u.role === 'admin' && u.isActive).length;
+        if (adminCount <= 1) {
+          return res.status(403).json({ message: "Cannot delete the last admin user" });
+        }
+      }
+      
+      // Delete the user (cascading deletes handled in storage)
+      await storage.deleteUser(id);
+      
+      res.json({ message: "User deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting user:", error);
+      const msg =
+        error.message?.includes("FOREIGN KEY")
+          ? "Δεν ήταν δυνατή η διαγραφή — υπάρχουν συνδεδεμένα δεδομένα. Επανεκκινήστε τον server μετά από ενημέρωση."
+          : error.message || "Failed to delete user";
+      res.status(500).json({ message: msg });
+    }
+  });
+
+  // File upload routes
+  app.post("/api/upload/avatar", requireAuth, upload.single('avatar'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ 
+          success: false,
+          message: "No file uploaded. Please select an image file." 
+        });
+      }
+
+      // Verify file was actually saved
+      const filePath = path.join(process.cwd(), 'public', 'uploads', 'avatars', req.file.filename);
+      if (!fs.existsSync(filePath)) {
+        console.error("File was not saved:", filePath);
+        return res.status(500).json({ 
+          success: false,
+          message: "File upload failed - file was not saved" 
+        });
+      }
+
+      const fileUrl = `/uploads/avatars/${req.file.filename}`;
+      console.log(`✅ Avatar uploaded successfully: ${fileUrl}`);
+      
+      res.json({ 
+        success: true, 
+        url: fileUrl,
+        filename: req.file.filename 
+      });
+    } catch (error: any) {
+      console.error("Error uploading avatar:", error);
+      
+      // Handle multer errors specifically
+      if (error instanceof multer.MulterError) {
+        if (error.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ 
+            success: false,
+            message: "File too large. Maximum size is 5MB." 
+          });
+        }
+        return res.status(400).json({ 
+          success: false,
+          message: error.message || "File upload error" 
+        });
+      }
+      
+      // Handle validation errors
+      if (error.message && error.message.includes('Invalid file type')) {
+        return res.status(400).json({ 
+          success: false,
+          message: error.message 
+        });
+      }
+      
+      res.status(500).json({ 
+        success: false,
+        message: error.message || "Failed to upload avatar" 
+      });
+    }
+  });
+
+  app.delete("/api/upload/avatar/:filename", requireAuth, async (req, res) => {
+    try {
+      const { filename } = req.params;
+      const filePath = path.join(process.cwd(), 'public', 'uploads', 'avatars', filename);
+      
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        res.json({ success: true, message: "File deleted successfully" });
+      } else {
+        res.status(404).json({ message: "File not found" });
+      }
+    } catch (error) {
+      console.error("Error deleting avatar:", error);
+      res.status(500).json({ message: "Failed to delete avatar" });
+    }
+  });
+
+  // Company info routes
+  app.get("/api/company", async (req, res) => {
+    try {
+      const info = await storage.getCompanyInfo();
+      res.json(info || { name: "Barbershop Premium", description: "Το καλύτερο κουρείο στην πόλη" });
+    } catch (error) {
+      console.error("Error fetching company info:", error);
+      res.status(500).json({ message: "Failed to fetch company info" });
+    }
+  });
+
+  app.put("/api/admin/company", requireAdmin, async (req, res) => {
+    try {
+      const validatedData = insertCompanyInfoSchema.parse(req.body);
+      const company = await storage.updateCompanyInfo(validatedData);
+      res.json(company);
+    } catch (error: any) {
+      console.error("Error updating company info:", error);
+      res.status(400).json({ message: error.message || "Failed to update company info" });
+    }
+  });
+
+  // Admin push notifications
+  app.post("/api/admin/push-notifications", requireAdmin, async (req, res) => {
+    try {
+      const { audience, title, message, userIds } = req.body;
+
+      if (!audience || !title || !message) {
+        return res.status(400).json({ message: "Audience, title and message are required" });
+      }
+
+      if (audience === "selected") {
+        if (!Array.isArray(userIds) || userIds.length === 0) {
+          return res.status(400).json({
+            message: "Επιλέξτε τουλάχιστον έναν χρήστη για αποστολή",
+          });
+        }
+        const bad = userIds.some((id: unknown) => typeof id !== "string" || !String(id).trim());
+        if (bad) {
+          return res.status(400).json({ message: "Μη έγκυρη λίστα χρηστών" });
+        }
+      }
+
+      await sendPushToAudience(
+        title,
+        message,
+        audience,
+        audience === "selected" ? userIds : undefined
+      );
+
+      const messages = await storage.getAllPushMessages();
+      const latest = [...messages].sort(
+        (a, b) =>
+          new Date(b.sentAt || 0).getTime() - new Date(a.sentAt || 0).getTime()
+      )[0];
+
+      res.status(201).json(latest ?? { audience, title, body: message });
+    } catch (error: any) {
+      console.error("Error sending push notification:", error);
+      res.status(500).json({ message: error.message || "Failed to send push notification" });
+    }
+  });
+  
+  app.get("/api/admin/push-notifications", requireAdmin, async (req, res) => {
+    try {
+      const messages = await storage.getAllPushMessages();
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching push messages:", error);
+      res.status(500).json({ message: "Failed to fetch push messages" });
+    }
+  });
+
+  // Get audience counts for message composer
+  app.get("/api/admin/audience-counts", requireAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      const today = new Date();
+      
+      // Get today's namedays
+      const todayString = String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      const todaysNamedays = await storage.getNamedaysByDate(todayString);
+      
+      // Count users with nameday
+      const namedayUsers = users.filter(user => 
+        todaysNamedays.some(nameday => 
+          user.firstName.toLowerCase() === nameday.name.toLowerCase()
+        )
+      ).length;
+      
+      // Count users with birthday
+      const todayDD = String(today.getDate()).padStart(2, '0');
+      const todayMM = String(today.getMonth() + 1).padStart(2, '0');
+      const todayBirthdayMatch = `${todayDD}-${todayMM}`;
+      const birthdayUsers = users.filter(user => 
+        user.birthday && user.birthday.substring(0, 5) === todayBirthdayMatch
+      ).length;
+      
+      // Count users with upcoming appointments
+      const upcomingAppointments = await storage.getUpcomingAppointments();
+      const upcomingUserIds = new Set(upcomingAppointments.map(a => a.userId));
+      const upcomingUsers = upcomingUserIds.size;
+      
+      res.json({
+        all: users.length,
+        nameday: namedayUsers,
+        birthday: birthdayUsers,
+        upcoming: upcomingUsers,
+      });
+    } catch (error) {
+      console.error("Error fetching audience counts:", error);
+      res.status(500).json({ message: "Failed to fetch audience counts" });
+    }
+  });
+
+  /** Minimal user list for admin notification recipient picker (sorted A→Ω, el). */
+  app.get("/api/admin/notification-recipients", requireAdmin, async (req, res) => {
+    try {
+      const all = await storage.getAllUsers();
+      const users = all
+        .map((u) => ({
+          id: u.id,
+          firstName: u.firstName,
+          lastName: u.lastName ?? "",
+          email: u.email,
+          isWalkIn: isPlaceholderEmail(u.email),
+        }))
+        .sort((a, b) => {
+          const na = `${a.firstName} ${a.lastName}`.trim().toLowerCase();
+          const nb = `${b.firstName} ${b.lastName}`.trim().toLowerCase();
+          return na.localeCompare(nb, "el");
+        });
+      res.json({ users });
+    } catch (error) {
+      console.error("Error fetching notification recipients:", error);
+      res.status(500).json({ message: "Failed to fetch recipients" });
+    }
+  });
+
+  // Alias for message history (same as push-notifications)
+  app.get("/api/admin/message-history", requireAdmin, async (req, res) => {
+    try {
+      const messages = await storage.getAllPushMessages();
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching message history:", error);
+      res.status(500).json({ message: "Failed to fetch message history" });
+    }
+  });
+
+  // FCM Token registration endpoint
+  app.post("/api/fcm/register", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      const { token, deviceInfo } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ message: "FCM token is required" });
+      }
+
+      await storage.saveFcmToken(userId, token, deviceInfo ? JSON.stringify(deviceInfo) : undefined);
+      
+      res.json({ message: "FCM token registered successfully" });
+    } catch (error: any) {
+      console.error("Error registering FCM token:", error);
+      res.status(500).json({ message: error.message || "Failed to register FCM token" });
+    }
+  });
+
+  // FCM Token unregistration endpoint
+  app.post("/api/fcm/unregister", requireAuth, async (req, res) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ message: "FCM token is required" });
+      }
+
+      await storage.deleteFcmToken(token);
+      
+      res.json({ message: "FCM token unregistered successfully" });
+    } catch (error: any) {
+      console.error("Error unregistering FCM token:", error);
+      res.status(500).json({ message: error.message || "Failed to unregister FCM token" });
+    }
+  });
+
+  // NOTE: Removed duplicate GET /api/notifications endpoint that returned push messages
+  // The correct endpoint is at line 2330 which returns actual database notifications
+
+  // Google Calendar Configuration Routes
+  app.get("/api/admin/google-calendar-config", requireAdmin, async (req, res) => {
+    try {
+      const config = await storage.getGoogleCalendarConfig();
+      if (!config) {
+        return res.json({ isConfigured: false });
+      }
+      
+      // Don't expose the service account key in the response
+      const safeConfig = {
+        ...config,
+        serviceAccountKey: "[HIDDEN]",
+        isConfigured: true
+      };
+      
+      res.json(safeConfig);
+    } catch (error) {
+      console.error("Error fetching Google Calendar config:", error);
+      res.status(500).json({ message: "Failed to fetch Google Calendar configuration" });
+    }
+  });
+
+  app.post("/api/admin/google-calendar-config", requireAdmin, async (req, res) => {
+    try {
+      const existing = await storage.getGoogleCalendarConfig();
+      const body = { ...req.body };
+      const keyInput = typeof body.serviceAccountKey === "string" ? body.serviceAccountKey.trim() : "";
+      if (existing && !keyInput) {
+        body.serviceAccountKey = existing.serviceAccountKey;
+      }
+
+      const configData = insertGoogleCalendarConfigSchema.parse(body);
+
+      try {
+        JSON.parse(configData.serviceAccountKey.trim());
+      } catch {
+        return res.status(400).json({ message: "Μη έγκυρο JSON κλειδί service account" });
+      }
+
+      const config = await storage.updateGoogleCalendarConfig(configData);
+
+      const { reinitializeGoogleCalendar } = await import("./googleCalendar");
+      await reinitializeGoogleCalendar();
+
+      const safeConfig = {
+        ...config,
+        serviceAccountKey: "[HIDDEN]",
+        isConfigured: true
+      };
+
+      res.json(safeConfig);
+    } catch (error: any) {
+      if (error?.name === "ZodError") {
+        const first = error.errors?.[0];
+        return res.status(400).json({
+          message: first?.message || "Μη έγκυρα δεδομένα διαμόρφωσης",
+        });
+      }
+      console.error("Error updating Google Calendar config:", error);
+      res.status(500).json({ message: "Failed to update Google Calendar configuration" });
+    }
+  });
+
+  app.delete("/api/admin/google-calendar-config", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteGoogleCalendarConfig();
+      res.json({ message: "Google Calendar configuration deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting Google Calendar config:", error);
+      res.status(500).json({ message: "Failed to delete Google Calendar configuration" });
+    }
+  });
+
+  app.post("/api/admin/google-calendar-test", requireAdmin, async (req, res) => {
+    const calendarId = typeof req.body?.calendarId === "string" ? req.body.calendarId.trim() : "";
+    if (!calendarId) {
+      return res.status(400).json({ message: "Απαιτείται Calendar ID για δοκιμή" });
+    }
+
+    try {
+      await reinitializeGoogleCalendar();
+      const result = await testCalendarAccess(calendarId);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.error || "Αποτυχία σύνδεσης Google Calendar",
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: "Google Calendar connection successful",
+        calendarTitle: result.calendar?.summary || calendarId,
+        eventsFound: result.eventsFound ?? 0,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Σφάλμα διακομιστή κατά τη δοκιμή Google Calendar";
+      console.error("Google Calendar test failed:", error);
+      return res.status(500).json({ success: false, message });
+    }
+  });
+
+  // OAuth Configuration admin routes
+  app.get("/api/admin/oauth-config", requireAdmin, async (req, res) => {
+    try {
+      const config = await storage.getOAuthConfig();
+      if (config) {
+        // Hide secrets for security
+        res.json({
+          ...config,
+          googleClientSecret: config.googleClientSecret ? "[HIDDEN]" : undefined,
+          facebookAppSecret: config.facebookAppSecret ? "[HIDDEN]" : undefined,
+          sessionSecret: config.sessionSecret ? "[HIDDEN]" : undefined,
+          isConfigured: true
+        });
+      } else {
+        res.json({ isConfigured: false });
+      }
+    } catch (error) {
+      console.error("Error getting OAuth config:", error);
+      res.status(500).json({ message: "Failed to get OAuth configuration" });
+    }
+  });
+
+  app.post("/api/admin/oauth-config", requireAdmin, async (req, res) => {
+    try {
+      const configData = insertOAuthConfigSchema.parse(req.body);
+      const config = await storage.updateOAuthConfig(configData);
+      
+      res.json({
+        ...config,
+        googleClientSecret: config.googleClientSecret ? "[HIDDEN]" : undefined,
+        facebookAppSecret: config.facebookAppSecret ? "[HIDDEN]" : undefined,
+        sessionSecret: config.sessionSecret ? "[HIDDEN]" : undefined,
+        isConfigured: true
+      });
+    } catch (error: any) {
+      console.error("Error saving OAuth config:", error);
+      res.status(500).json({ message: error.message || "Failed to save OAuth configuration" });
+    }
+  });
+
+  app.delete("/api/admin/oauth-config", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteOAuthConfig();
+      res.json({ message: "OAuth configuration deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting OAuth config:", error);
+      res.status(500).json({ message: "Failed to delete OAuth configuration" });
+    }
+  });
+
+  // Services management routes
+  app.get("/api/services", async (req, res) => {
+    try {
+      const allServices = await storage.getAllServices();
+      // Filter to only return active services
+      const activeServices = allServices.filter(svc => svc.isActive !== false);
+      res.json(activeServices);
+    } catch (error) {
+      console.error("Error fetching services:", error);
+      res.status(500).json({ message: "Failed to fetch services" });
+    }
+  });
+
+  app.get("/api/services/:id", async (req, res) => {
+    try {
+      const service = await storage.getService(req.params.id);
+      if (!service) {
+        return res.status(404).json({ message: "Service not found" });
+      }
+      res.json(service);
+    } catch (error) {
+      console.error("Error fetching service:", error);
+      res.status(500).json({ message: "Failed to fetch service" });
+    }
+  });
+
+  app.post("/api/admin/services", requireAdmin, async (req, res) => {
+    try {
+      const { insertServiceSchema } = await import("@shared/schema");
+      const serviceData = insertServiceSchema.parse(req.body);
+      const service = await storage.createService(serviceData);
+      res.status(201).json(service);
+    } catch (error: any) {
+      console.error("Error creating service:", error);
+      res.status(400).json({ message: error.message || "Failed to create service" });
+    }
+  });
+
+  app.put("/api/admin/services/:id", requireAdmin, async (req, res) => {
+    try {
+      const { insertServiceSchema } = await import("@shared/schema");
+      const serviceData = insertServiceSchema.partial().parse(req.body);
+      const service = await storage.updateService(req.params.id, serviceData);
+      res.json(service);
+    } catch (error: any) {
+      console.error("Error updating service:", error);
+      res.status(400).json({ message: error.message || "Failed to update service" });
+    }
+  });
+
+  app.delete("/api/admin/services/:id", requireAdmin, async (req, res) => {
+    try {
+      await storage.deleteService(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting service:", error);
+      res.status(500).json({ message: "Failed to delete service" });
+    }
+  });
+
+  // ============================================
+  // PROFILE MANAGEMENT ROUTES
+  // ============================================
+  
+  app.get("/api/profile", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json(sanitizeUser(user));
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
+  app.put("/api/profile", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { firstName, lastName, phone, avatar, birthday, notificationPreferences } = req.body;
+      
+      const updateData: any = {};
+      if (firstName !== undefined) updateData.firstName = firstName;
+      if (lastName !== undefined) updateData.lastName = lastName;
+      if (phone !== undefined) updateData.phone = phone;
+      if (avatar !== undefined) updateData.avatar = avatar;
+      if (birthday !== undefined) updateData.birthday = birthday;
+      if (notificationPreferences !== undefined) {
+        updateData.notificationPreferences = JSON.stringify(notificationPreferences);
+      }
+      
+      const updatedUser = await storage.updateUser(userId, updateData);
+      res.json(sanitizeUser(updatedUser));
+    } catch (error: any) {
+      console.error("Error updating profile:", error);
+      res.status(400).json({ message: error.message || "Failed to update profile" });
+    }
+  });
+
+  app.put("/api/profile/password", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { currentPassword, newPassword } = req.body;
+      
+      const user = await storage.getUser(userId);
+      if (!user || !user.password) {
+        return res.status(400).json({ message: "Password change not available for OAuth users" });
+      }
+      
+      // Verify current password
+      const bcrypt = await import("bcrypt");
+      const isValid = await bcrypt.compare(currentPassword, user.password);
+      if (!isValid) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+      
+      // Hash and update password
+      const hashedPassword = await hashPassword(newPassword);
+      await storage.updateUserPassword(userId, hashedPassword);
+      
+      res.json({ message: "Password updated successfully" });
+    } catch (error: any) {
+      console.error("Error updating password:", error);
+      res.status(400).json({ message: error.message || "Failed to update password" });
+    }
+  });
+
+  // ============================================
+  // FAVORITE BARBERS ROUTES
+  // ============================================
+  
+  app.post("/api/favorites/barbers/:employeeId", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { employeeId } = req.params;
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const favoriteBarbers = JSON.parse(user.favoriteBarbers || '[]');
+      if (!favoriteBarbers.includes(employeeId)) {
+        favoriteBarbers.push(employeeId);
+        await storage.updateUser(userId, {
+          favoriteBarbers: JSON.stringify(favoriteBarbers)
+        });
+      }
+      
+      res.json({ favoriteBarbers });
+    } catch (error: any) {
+      console.error("Error adding favorite barber:", error);
+      res.status(400).json({ message: error.message || "Failed to add favorite barber" });
+    }
+  });
+
+  app.delete("/api/favorites/barbers/:employeeId", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const { employeeId } = req.params;
+      
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const favoriteBarbers = JSON.parse(user.favoriteBarbers || '[]');
+      const updatedFavorites = favoriteBarbers.filter((id: string) => id !== employeeId);
+      
+      await storage.updateUser(userId, {
+        favoriteBarbers: JSON.stringify(updatedFavorites)
+      });
+      
+      res.json({ favoriteBarbers: updatedFavorites });
+    } catch (error: any) {
+      console.error("Error removing favorite barber:", error);
+      res.status(400).json({ message: error.message || "Failed to remove favorite barber" });
+    }
+  });
+
+  app.get("/api/favorites/barbers", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const favoriteBarbers = JSON.parse(user.favoriteBarbers || '[]');
+      const employees = await storage.getAllEmployees();
+      const favoriteEmployees = employees.filter(emp => favoriteBarbers.includes(emp.id));
+      
+      res.json(favoriteEmployees);
+    } catch (error) {
+      console.error("Error fetching favorite barbers:", error);
+      res.status(500).json({ message: "Failed to fetch favorite barbers" });
+    }
+  });
+
+  // ============================================
+  // NOTIFICATIONS ROUTES
+  // ============================================
+  
+  app.get("/api/notifications", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const notifications = await storage.getNotificationsByUser(userId, limit);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      
+      // Defensive check: ensure storage and method exist
+      if (!storage) {
+        throw new Error("Storage not initialized");
+      }
+      if (typeof storage.getUnreadNotificationCount !== "function") {
+        throw new Error(`getUnreadNotificationCount is not a function. Storage methods: ${Object.getOwnPropertyNames(Object.getPrototypeOf(storage)).join(", ")}`);
+      }
+      
+      const count = await storage.getUnreadNotificationCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unread count:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ message: "Failed to fetch unread count", error: errorMessage });
+    }
+  });
+
+  app.put("/api/notifications/:id/read", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.markNotificationAsRead(id);
+      res.json({ message: "Notification marked as read" });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.put("/api/notifications/read-all", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.user as any).id;
+      await storage.markAllNotificationsAsRead(userId);
+      res.json({ message: "All notifications marked as read" });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ message: "Failed to mark all notifications as read" });
+    }
+  });
+
+  app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const userId = (req.user as any)?.id;
+      
+      // Verify the notification belongs to the user by checking all user notifications
+      const userNotifications = await storage.getNotificationsByUser(userId, 1000);
+      const notification = userNotifications.find(n => n.id === id);
+      
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+      
+      await storage.deleteNotification(id);
+      res.json({ message: "Notification deleted" });
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      res.status(500).json({ message: "Failed to delete notification" });
+    }
+  });
+
+  // ============================================
+  // RECURRING APPOINTMENTS ROUTES
+  // ============================================
+  
+  app.delete("/api/appointments/recurring/:parentId", requireAuth, async (req, res) => {
+    try {
+      const { parentId } = req.params;
+      const userId = (req.user as any).id;
+      
+      // Verify the parent appointment belongs to the user
+      const parentAppointment = await storage.getAppointment(parentId);
+      if (!parentAppointment || parentAppointment.userId !== userId) {
+        return res.status(404).json({ message: "Appointment not found" });
+      }
+      
+      await storage.cancelRecurringAppointmentSeries(parentId);
+      
+      // Create notification
+      await storage.createNotification({
+        userId,
+        type: 'appointment_cancelled',
+        title: 'Επαναλαμβανόμενο Ραντεβού Ακυρώθηκε',
+        message: 'Η σειρά επαναλαμβανόμενων ραντεβού έχει ακυρωθεί.',
+        link: '/appointments'
+      });
+      
+      res.json({ message: "Recurring appointment series cancelled" });
+    } catch (error: any) {
+      console.error("Error cancelling recurring appointments:", error);
+      res.status(500).json({ message: error.message || "Failed to cancel recurring appointments" });
+    }
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}
