@@ -188,23 +188,28 @@ tail -30 /var/log/nginx/error.log
 
 Αν το `curl http://127.0.0.1:5100` **αποτυγχάνει** → πρόβλημα εφαρμογής/PM2, όχι DNS.
 
-### 2. Πλήρης επανεκκίνηση PEQI
+### 2. Γρήγορη διόρθωση (ένα script)
+
+```bash
+cd /var/www/peqi
+git pull origin main
+chmod +x deploy/vps-fix-502.sh
+bash deploy/vps-fix-502.sh
+```
+
+Το script κάνει build, `db:push`, διορθώνει nginx αν δείχνει στη 5000, ξεκινάει PM2 και ελέγχει `curl http://127.0.0.1:5100`.
+
+### 3. Χειροκίνητα (αν προτιμάτε)
 
 ```bash
 cd /var/www/peqi
 
-# Σταματήστε παλιά Fade Factory processes αν υπάρχουν
 pm2 delete barberbook 2>/dev/null || true
-pm2 delete fadefactory 2>/dev/null || true
 
-# .env υποχρεωτικό
 test -f .env || cp deploy/env.production.example .env && nano .env
 # PORT=5100, BASE_URL=https://peqi.hair, SESSION_SECRET=..., DATABASE_URL=file:./database.sqlite
 
-npm ci
-npm run build
-npm run db:push    # υποχρεωτικό — δημιουργεί namedays, users, κ.λπ.
-# προαιρετικό demo data: npm run seed
+npm ci && npm run build && npm run db:push
 
 pm2 delete peqi 2>/dev/null || true
 pm2 start deploy/ecosystem.config.cjs
@@ -215,7 +220,7 @@ curl -sI http://127.0.0.1:5100 | head -3
 
 Πρέπει να δείτε `HTTP/1.1` (π.χ. 200 ή 304), όχι `Connection refused`.
 
-### 3. Διόρθωση nginx (λάθος θύρα 5000)
+### 4. Διόρθωση nginx (λάθος θύρα 5000)
 
 Αν το `grep proxy_pass` δείχνει `5000`:
 
@@ -230,7 +235,7 @@ nginx -t && systemctl reload nginx
 bash /var/www/peqi/deploy/vps-bootstrap.sh peqi.hair
 ```
 
-### 4. Μετά το SSL (certbot)
+### 5. Μετά το SSL (certbot)
 
 Μερικές φορές το HTTPS block **δεν** έχει `proxy_pass`. Ελέγξτε:
 
@@ -240,7 +245,7 @@ grep -A20 "listen 443" /etc/nginx/sites-enabled/peqi
 
 Και τα δύο blocks (80 και 443) πρέπει να έχουν `proxy_pass http://127.0.0.1:5100;`.
 
-### 5. Ακόμα 502;
+### 6. Ακόμα 502;
 
 Στείλτε output από:
 
@@ -251,6 +256,22 @@ cat /var/www/peqi/.env | grep -E '^PORT=|^DATABASE_URL=|^NODE_ENV='
 ```
 
 Συχνά αίτια στα logs: λείπει `.env`, λάθος `DATABASE_URL`, αποτυχία `npm run build`, ή crash κατά το startup.
+
+### `SqliteError: no such table: namedays`
+
+Η SQLite υπάρχει αλλά **δεν έχουν δημιουργηθεί οι πίνακες**. Στο VPS:
+
+```bash
+cd /var/www/peqi
+grep DATABASE_URL .env    # π.χ. file:./database.sqlite
+npm run db:push
+pm2 restart peqi
+pm2 logs peqi --lines 20
+```
+
+Μετά το `db:push`, στην εκκίνηση γεμίζονται αυτόματα τα εορτολογικά (namedays) από το `namedays_greek.csv`.
+
+Το μήνυμα **Google Calendar service account key not available** είναι προειδοποίηση — ρυθμίζεται αργότερα από Admin → Google Calendar.
 
 ---
 

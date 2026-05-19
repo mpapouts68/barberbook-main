@@ -56,7 +56,20 @@ export async function initializeDatabase() {
   ];
 
   // Check if namedays already exist - if not, load Greek namedays
-  const existingNamedays = await db.select().from(namedays);
+  let existingNamedays: { id: string; date: string; name: string }[] = [];
+  try {
+    existingNamedays = await db.select().from(namedays);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("no such table")) {
+      console.error(
+        "❌ Database tables missing. On the server run:\n" +
+          "   cd /var/www/peqi && npm run db:push && pm2 restart peqi\n" +
+          "   Or: bash deploy/vps-fix-502.sh",
+      );
+    }
+    throw error;
+  }
   if (existingNamedays.length === 0) {
     const loaded = await tryLoadGreekNamedays();
     if (!loaded) {
