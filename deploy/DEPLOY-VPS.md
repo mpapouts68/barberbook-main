@@ -162,6 +162,97 @@ bash deploy/deploy.sh          # χειροκίνητο deploy χωρίς GitHub
 
 ---
 
+## 502 Bad Gateway (nginx)
+
+Το nginx δουλεύει, αλλά **δεν απαντάει η Node εφαρμογή** πίσω από το `proxy_pass`. Στο Fade Factory η θύρα ήταν **5000** και το PM2 λεγόταν `barberbook` — το PEQI χρησιμοποιεί **5100** και όνομα **`peqi`**.
+
+### 1. Διάγνωση (τρέξτε στο VPS)
+
+```bash
+cd /var/www/peqi
+
+# Η εφαρμογή ακούει στη 5100;
+ss -tlnp | grep 5100
+curl -sI http://127.0.0.1:5100 | head -5
+
+# PM2
+pm2 status
+pm2 logs peqi --lines 80
+
+# Τι θύρα βλέπει το nginx; (πρέπει 5100, όχι 5000)
+grep -R proxy_pass /etc/nginx/sites-enabled/
+
+# Σφάλματα nginx
+tail -30 /var/log/nginx/error.log
+```
+
+Αν το `curl http://127.0.0.1:5100` **αποτυγχάνει** → πρόβλημα εφαρμογής/PM2, όχι DNS.
+
+### 2. Πλήρης επανεκκίνηση PEQI
+
+```bash
+cd /var/www/peqi
+
+# Σταματήστε παλιά Fade Factory processes αν υπάρχουν
+pm2 delete barberbook 2>/dev/null || true
+pm2 delete fadefactory 2>/dev/null || true
+
+# .env υποχρεωτικό
+test -f .env || cp deploy/env.production.example .env && nano .env
+# PORT=5100, BASE_URL=https://peqi.hair, SESSION_SECRET=..., DATABASE_URL=file:./database.sqlite
+
+npm ci
+npm run build
+npm run db:push    # πρώτη φορά — δημιουργία SQLite
+
+pm2 delete peqi 2>/dev/null || true
+pm2 start deploy/ecosystem.config.cjs
+pm2 save
+
+curl -sI http://127.0.0.1:5100 | head -3
+```
+
+Πρέπει να δείτε `HTTP/1.1` (π.χ. 200 ή 304), όχι `Connection refused`.
+
+### 3. Διόρθωση nginx (λάθος θύρα 5000)
+
+Αν το `grep proxy_pass` δείχνει `5000`:
+
+```bash
+sed -i 's/127.0.0.1:5000/127.0.0.1:5100/g; s/localhost:5000/127.0.0.1:5100/g' /etc/nginx/sites-available/peqi
+nginx -t && systemctl reload nginx
+```
+
+Ή ξανατρέξτε bootstrap (αντικαθιστά το site config):
+
+```bash
+bash /var/www/peqi/deploy/vps-bootstrap.sh peqi.hair
+```
+
+### 4. Μετά το SSL (certbot)
+
+Μερικές φορές το HTTPS block **δεν** έχει `proxy_pass`. Ελέγξτε:
+
+```bash
+grep -A20 "listen 443" /etc/nginx/sites-enabled/peqi
+```
+
+Και τα δύο blocks (80 και 443) πρέπει να έχουν `proxy_pass http://127.0.0.1:5100;`.
+
+### 5. Ακόμα 502;
+
+Στείλτε output από:
+
+```bash
+pm2 logs peqi --lines 40 --nostream
+ls -la /var/www/peqi/dist/index.js
+cat /var/www/peqi/.env | grep -E '^PORT=|^DATABASE_URL=|^NODE_ENV='
+```
+
+Συχνά αίτια στα logs: λείπει `.env`, λάθος `DATABASE_URL`, αποτυχία `npm run build`, ή crash κατά το startup.
+
+---
+
 ## Google OAuth / Calendar (production)
 
 - `BASE_URL=https://peqi.hair` στο `.env` και Admin  
