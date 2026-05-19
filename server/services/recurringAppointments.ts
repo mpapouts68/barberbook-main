@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import { createCalendarEvent } from "../googleCalendar";
+import { buildGoogleCalendarEventData, userToCalendarClient } from "../calendarEventHelpers";
 import type { Appointment, InsertAppointment, Employee } from "@shared/schema";
 
 /**
@@ -93,27 +94,15 @@ export async function createRecurringAppointments(
         
         // Get user details
         const user = await storage.getUser(created.userId);
-        
-        // Create calendar event with proper format
-        const startDateTime = `${created.date}T${created.time}:00`;
-        const appointmentDateTime = new Date(startDateTime);
-        const endDateTime = new Date(appointmentDateTime.getTime() + (created.duration || 30) * 60000);
-        
-        const eventData = {
-          summary: `${serviceName} - ${created.barber}`,
-          description: `Ραντεβού κουρείου\nΥπηρεσία: ${serviceName}\nΠελάτης: ${user?.firstName || 'Client'} ${user?.lastName || ''}${user?.email ? `\nEmail: ${user.email}` : ''}${user?.phone ? `\nΤηλέφωνο: ${user.phone}` : ''}${created.notes ? `\nΣημειώσεις: ${created.notes}` : ''}`,
-          start: {
-            dateTime: appointmentDateTime.toISOString(),
-            timeZone: 'Europe/Athens'
-          },
-          end: {
-            dateTime: endDateTime.toISOString(),
-            timeZone: 'Europe/Athens'
-          }
-        };
-        
+        const eventData = buildGoogleCalendarEventData(
+          created,
+          serviceName,
+          userToCalendarClient(user),
+        );
         const calendarEvent = await createCalendarEvent(employee.googleCalendarId, eventData);
-        await storage.updateAppointment(created.id, { googleEventId: calendarEvent.id });
+        if (calendarEvent.id) {
+          await storage.updateAppointment(created.id, { googleEventId: calendarEvent.id });
+        }
       } catch (error) {
         console.error('Failed to create calendar event for recurring appointment:', error);
       }

@@ -26,6 +26,11 @@ import { validateRegistration, validateLogin, validateForgotPassword, validatePa
 import { loginLimiter, registrationLimiter, passwordResetLimiter, verificationLimiter } from "./middleware/rateLimiter";
 import { insertAppointmentSchema, insertPushMessageSchema, insertEmployeeSchema, insertCompanyInfoSchema, insertGoogleCalendarConfigSchema, insertOAuthConfigSchema, insertNotificationSchema } from "@shared/schema";
 import { isPlaceholderEmail } from "./utils";
+import {
+  appointmentMatchesGoogleEvent,
+  buildGoogleCalendarEventData,
+  userToCalendarClient,
+} from "./calendarEventHelpers";
 // Recurring appointments service - will be loaded dynamically if available
 async function getRecurringAppointmentsService() {
   try {
@@ -777,36 +782,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           if (employee && employee.googleCalendarEnabled && employee.googleCalendarId) {
             const user = await storage.getUser((req.user as any).id);
-            
-            // Get service name for calendar event
             const serviceData = await storage.getService(appointment.service);
             const serviceName = serviceData?.name || appointment.service;
-            
-            // Create calendar event
-            const startDateTime = `${appointment.date}T${appointment.time}:00`;
-            const appointmentDateTime = new Date(startDateTime);
-            const endDateTime = new Date(appointmentDateTime.getTime() + (appointment.duration || 30) * 60000);
-            
-            const eventData = {
-              summary: `${serviceName} - ${user?.firstName || 'Client'}`,
-              description: `Ραντεβού κουρείου\nΥπηρεσία: ${serviceName}\nΠελάτης: ${user?.firstName || 'Client'} ${user?.lastName || ''}${user?.email && !isPlaceholderEmail(user.email) ? `\nEmail: ${user.email}` : ''}${user?.phone ? `\nΤηλέφωνο: ${user.phone}` : ''}${appointment.notes ? `\nΣημειώσεις: ${appointment.notes}` : ''}`,
-              start: {
-                dateTime: appointmentDateTime.toISOString(),
-                timeZone: 'Europe/Athens'
-              },
-              end: {
-                dateTime: endDateTime.toISOString(),
-                timeZone: 'Europe/Athens'
-              }
-              // Removed attendees to avoid Domain-Wide Delegation requirement
-            };
-            
+            const eventData = buildGoogleCalendarEventData(
+              appointment,
+              serviceName,
+              userToCalendarClient(user),
+            );
             const calendarEvent = await createCalendarEvent(employee.googleCalendarId, eventData);
-            
-            // Update appointment with calendar event ID
             if (calendarEvent.id) {
               await storage.updateAppointment(appointment.id, {
-                notes: appointment.notes
+                googleEventId: calendarEvent.id,
               });
               appointment.googleEventId = calendarEvent.id;
             }
@@ -1230,30 +1216,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Get service name for calendar event
           const serviceData = await storage.getService(appointment.service);
           const serviceName = serviceData?.name || appointment.service;
-          
-          // Use the user object we already have
-          const appointmentUser = user;
-          
-          // Create calendar event with proper format
-          const startDateTime = `${appointment.date}T${appointment.time}:00`;
-          const appointmentDateTime = new Date(startDateTime);
-          const endDateTime = new Date(appointmentDateTime.getTime() + (appointment.duration || 30) * 60000);
-          
-          const eventData = {
-            summary: `${serviceName} - ${appointmentUser?.firstName || 'Client'}`,
-            description: `Ραντεβού κουρείου\nΥπηρεσία: ${serviceName}\nΠελάτης: ${appointmentUser?.firstName || 'Client'} ${appointmentUser?.lastName || ''}${appointmentUser?.email && !isPlaceholderEmail(appointmentUser.email) ? `\nEmail: ${appointmentUser.email}` : ''}${appointmentUser?.phone ? `\nΤηλέφωνο: ${appointmentUser.phone}` : ''}${appointment.notes ? `\nΣημειώσεις: ${appointment.notes}` : ''}`,
-            start: {
-              dateTime: appointmentDateTime.toISOString(),
-              timeZone: 'Europe/Athens'
-            },
-            end: {
-              dateTime: endDateTime.toISOString(),
-              timeZone: 'Europe/Athens'
-            }
-          };
-          
+          const eventData = buildGoogleCalendarEventData(
+            appointment,
+            serviceName,
+            userToCalendarClient(user),
+          );
           const calendarEvent = await createCalendarEvent(employee.googleCalendarId, eventData);
-          await storage.updateAppointment(appointment.id, { googleEventId: calendarEvent.id });
+          if (calendarEvent.id) {
+            await storage.updateAppointment(appointment.id, { googleEventId: calendarEvent.id });
+          }
         } catch (calendarError) {
           console.warn("Failed to sync appointment with Google Calendar:", calendarError);
           // Don't fail the request if calendar sync fails
@@ -1343,12 +1314,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     const eventStartTime = eventStart.toTimeString().slice(0, 5);
                     const duration = Math.round((eventEnd.getTime() - eventStart.getTime()) / 60000);
                     
-                    // Check if this event is already in database (by googleEventId)
-                    const existingAppointment = enrichedAppointments.find(
-                      apt => apt.googleEventId === event.id
+                    const existingAppointment = enrichedAppointments.find((apt) =>
+                      appointmentMatchesGoogleEvent(apt, event, date, employee.id),
                     );
-                    
-                    // Only add if not already in database
                     if (!existingAppointment) {
                       googleCalendarAppointments.push({
                         id: `google-${event.id}`,
@@ -1447,26 +1415,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const user = await storage.getUser(updatedAppointment.userId);
             const serviceData = await storage.getService(updatedAppointment.service);
             const serviceName = serviceData?.name || updatedAppointment.service;
-            
-            const startDateTime = `${finalDate}T${finalTime}:00`;
-            const appointmentDateTime = new Date(startDateTime);
-            const endDateTime = new Date(appointmentDateTime.getTime() + finalDuration * 60000);
-            
-            const eventData = {
-              summary: `${serviceName} - ${user?.firstName || 'Client'}`,
-              description: `Ραντεβού κουρείου\nΥπηρεσία: ${serviceName}\nΠελάτης: ${user?.firstName || 'Client'} ${user?.lastName || ''}${user?.email && !isPlaceholderEmail(user.email) ? `\nEmail: ${user.email}` : ''}${user?.phone ? `\nΤηλέφωνο: ${user.phone}` : ''}${updatedAppointment.notes ? `\nΣημειώσεις: ${updatedAppointment.notes}` : ''}`,
-              start: {
-                dateTime: appointmentDateTime.toISOString(),
-                timeZone: 'Europe/Athens'
-              },
-              end: {
-                dateTime: endDateTime.toISOString(),
-                timeZone: 'Europe/Athens'
-              }
-            };
-            
+            const eventData = buildGoogleCalendarEventData(
+              { ...updatedAppointment, date: finalDate, time: finalTime, duration: finalDuration },
+              serviceName,
+              userToCalendarClient(user),
+            );
             const calendarEvent = await createCalendarEvent(employee.googleCalendarId, eventData);
-            await storage.updateAppointment(id, { googleEventId: calendarEvent.id });
+            if (calendarEvent.id) {
+              await storage.updateAppointment(id, { googleEventId: calendarEvent.id });
+            }
           }
         } catch (calendarError: any) {
           console.error('Failed to sync with Google Calendar:', calendarError?.message || calendarError);
