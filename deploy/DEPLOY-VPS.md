@@ -203,7 +203,8 @@ test -f .env || cp deploy/env.production.example .env && nano .env
 
 npm ci
 npm run build
-npm run db:push    # πρώτη φορά — δημιουργία SQLite
+npm run db:push    # υποχρεωτικό — δημιουργεί namedays, users, κ.λπ.
+# προαιρετικό demo data: npm run seed
 
 pm2 delete peqi 2>/dev/null || true
 pm2 start deploy/ecosystem.config.cjs

@@ -15,6 +15,9 @@ fi
 npm ci
 npm run build
 
+echo "==> Applying database schema (drizzle push)..."
+npm run db:push
+
 if pm2 describe peqi &>/dev/null; then
   pm2 reload deploy/ecosystem.config.cjs --update-env
 else
