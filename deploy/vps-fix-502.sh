@@ -65,6 +65,11 @@ npm ci
 npm run build
 npm run db:push
 
+if [[ -f eortologio_namedays.csv ]]; then
+  echo "==> Import eortologio namedays (if DB empty or --force on server)"
+  npm run import-namedays:force 2>/dev/null || true
+fi
+
 echo ""
 echo "==> Nginx proxy port (must be ${APP_PORT})"
 NGINX_SITE="/etc/nginx/sites-available/peqi"

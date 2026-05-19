@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 async function tryLoadGreekNamedays(): Promise<boolean> {
   try {
     const loadNamedaysModule = await import("./scripts/load-namedays");
-    await loadNamedaysModule.loadGreekNamedays();
+    await loadNamedaysModule.loadEortologioNamedays({ force: true });
     return true;
   } catch (error) {
     // Script not found or failed - will use fallback sample data

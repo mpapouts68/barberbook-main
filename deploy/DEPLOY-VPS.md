@@ -257,6 +257,27 @@ cat /var/www/peqi/.env | grep -E '^PORT=|^DATABASE_URL=|^NODE_ENV='
 
 Συχνά αίτια στα logs: λείπει `.env`, λάθος `DATABASE_URL`, αποτυχία `npm run build`, ή crash κατά το startup.
 
+### Εορτολόγιο (`eortologio_namedays.csv`)
+
+Πλήρες εορτολόγιο (~2800 ονόματα) από το αρχείο `eortologio_namedays.csv` στη ρίζα του project.
+
+**Τοπικά (μία φορά ή μετά από αλλαγή CSV):**
+
+```bash
+cd /var/www/peqi   # ή τοπικό project folder
+npm run import-namedays:force
+```
+
+**Στη συνέχεια** ανεβάστε τη βάση στο VPS (βλ. παρακάτω) **ή** στο VPS μετά από `git pull`:
+
+```bash
+cd /var/www/peqi
+npm run import-namedays:force
+pm2 restart peqi
+```
+
+---
+
 ### Ανέβασμα τοπικής `database.sqlite` (προτείνεται αν το `db:push` αποτυγχάνει)
 
 Η τοπική σας βάση έχει ήδη όλους τους πίνακες (`namedays`, `google_calendar_config`, κ.λπ.).
