@@ -40,7 +40,7 @@ npm install -g pm2
 
 mkdir -p /var/www/peqi
 cd /var/www/peqi
-git clone https://github.com/YOUR_USER/YOUR_REPO.git .
+git clone https://github.com/mpapouts68/peqi.git .
 
 cp deploy/env.production.example .env
 nano .env   # BASE_URL, SESSION_SECRET, EMAIL_*, κ.λπ.
