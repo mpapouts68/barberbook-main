@@ -870,36 +870,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send confirmation email
       try {
         const user = await storage.getUser((req.user as any).id);
-        if (user && user.email) {
-          // Check if user has email notifications enabled (default to true)
+        if (user?.email && !isPlaceholderEmail(user.email)) {
           let emailEnabled = true;
           try {
-            const prefs = user.notificationPreferences 
-              ? JSON.parse(user.notificationPreferences) 
+            const prefs = user.notificationPreferences
+              ? JSON.parse(user.notificationPreferences)
               : { email: true };
             emailEnabled = prefs.email !== false;
-          } catch (e) {
-            // Default to enabled if preferences are invalid
+          } catch {
+            // default enabled
           }
-          
+
           if (emailEnabled) {
             const serviceData = await storage.getService(appointment.service);
             const serviceName = serviceData?.name || appointment.service;
-            
             await sendAppointmentConfirmationEmail(
               user.email,
-              user.firstName,
+              user.firstName || "Πελάτη",
               appointment.date,
               appointment.time,
               serviceName,
               appointment.barber || employee.name,
-              appointment.duration
+              appointment.duration,
             );
+            console.log(`📧 Confirmation email queued for ${user.email}`);
           }
+        } else if (user?.email && isPlaceholderEmail(user.email)) {
+          console.log("📧 Skipped confirmation email (walk-in / no-email user)");
         }
       } catch (emailError) {
-        console.error('Failed to send confirmation email:', emailError);
-        // Don't fail appointment creation if email fails
+        console.error("Failed to send confirmation email:", emailError);
       }
       
       res.json(appointment);

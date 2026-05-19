@@ -3,56 +3,57 @@ import type { Transporter } from "nodemailer";
 import { isPlaceholderEmail } from "../utils";
 import { EMAIL_BRAND_FULL } from "./emailBranding";
 
-// Email configuration from environment variables
-const EMAIL_HOST = process.env.EMAIL_HOST || "smtp.gmail.com";
-const EMAIL_PORT = parseInt(process.env.EMAIL_PORT || "587");
-const EMAIL_USER = process.env.EMAIL_USER || "";
-const EMAIL_PASS = process.env.EMAIL_PASS || "";
-const EMAIL_FROM = process.env.EMAIL_FROM || "PEQI Haircut Studio <peqihaircutstudio@gmail.com>";
-const BASE_URL = process.env.BASE_URL || "http://localhost:5100";
+function getEmailConfig() {
+  return {
+    host: process.env.EMAIL_HOST || "smtp.gmail.com",
+    port: parseInt(process.env.EMAIL_PORT || "587", 10),
+    user: process.env.EMAIL_USER || "",
+    pass: process.env.EMAIL_PASS || "",
+    from:
+      process.env.EMAIL_FROM ||
+      "PEQI Haircut Studio <peqihaircutstudio@gmail.com>",
+    baseUrl: process.env.BASE_URL || "http://localhost:5100",
+  };
+}
+
+export function isEmailConfigured(): boolean {
+  const { user, pass } = getEmailConfig();
+  return Boolean(user && pass);
+}
+
+function hasSmtpCredentials(): boolean {
+  return isEmailConfigured();
+}
 
 // Create email transporter
 let transporter: Transporter | null = null;
 
 function getTransporter(): Transporter {
+  const cfg = getEmailConfig();
   if (!transporter) {
-    // In production, require email credentials
-    if (process.env.NODE_ENV === 'production') {
-      if (!EMAIL_USER || !EMAIL_PASS) {
-        console.error("❌ CRITICAL ERROR: Email credentials are required in production!");
-        console.error("   Please set EMAIL_USER and EMAIL_PASS environment variables.");
-        throw new Error("Email configuration is required for production");
-      }
-    }
-
-    // If email credentials are not configured, create a test account (dev mode only)
-    if (!EMAIL_USER || !EMAIL_PASS) {
-      console.warn("⚠️  Email credentials not configured. Using console logging for development.");
-      console.warn("⚠️  Set EMAIL_HOST, EMAIL_USER, EMAIL_PASS in environment variables for production.");
+    if (process.env.NODE_ENV === "production" && !cfg.user && !cfg.pass) {
+      console.error("❌ Email not configured: set EMAIL_USER and EMAIL_PASS in .env");
+    } else if (!cfg.user || !cfg.pass) {
+      console.warn("⚠️  Email credentials not configured — emails will be logged only.");
     }
 
     transporter = nodemailer.createTransport({
-      host: EMAIL_HOST,
-      port: EMAIL_PORT,
-      secure: EMAIL_PORT === 465,
-      auth: EMAIL_USER && EMAIL_PASS ? {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS,
-      } : undefined,
-      // Add connection timeout and retry logic
-      connectionTimeout: 10000, // 10 seconds
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.port === 465,
+      auth: cfg.user && cfg.pass ? { user: cfg.user, pass: cfg.pass } : undefined,
+      connectionTimeout: 10000,
       greetingTimeout: 10000,
       socketTimeout: 10000,
     });
 
-    // Verify connection in production
-    if (process.env.NODE_ENV === 'production' && EMAIL_USER && EMAIL_PASS) {
-      transporter.verify().then(() => {
-        console.log("✅ Email service configured and verified successfully");
-      }).catch((error) => {
-        console.error("❌ Email service verification failed:", error);
-        console.error("   Please check your EMAIL_HOST, EMAIL_PORT, EMAIL_USER, and EMAIL_PASS settings");
-      });
+    if (process.env.NODE_ENV === "production" && cfg.user && cfg.pass) {
+      transporter
+        .verify()
+        .then(() => console.log("✅ Email SMTP verified:", cfg.user))
+        .catch((error) => {
+          console.error("❌ Email SMTP verification failed:", error.message);
+        });
     }
   }
   return transporter;
@@ -66,10 +67,11 @@ export async function sendVerificationEmail(
   firstName: string,
   verificationToken: string
 ): Promise<void> {
-  const verificationUrl = `${BASE_URL}/verify-email/${verificationToken}`;
+  const cfg = getEmailConfig();
+  const verificationUrl = `${cfg.baseUrl}/verify-email/${verificationToken}`;
 
   const mailOptions = {
-    from: EMAIL_FROM,
+    from: cfg.from,
     to: email,
     subject: "Επιβεβαίωση Email - PEQI Haircut Studio",
     html: `
@@ -131,7 +133,7 @@ export async function sendVerificationEmail(
   };
 
   try {
-    if (!EMAIL_USER || !EMAIL_PASS) {
+    if (!hasSmtpCredentials()) {
       // Development mode - log email instead of sending
       console.log("📧 [DEV MODE] Verification Email:");
       console.log(`To: ${email}`);
@@ -161,10 +163,10 @@ export async function sendPasswordResetEmail(
   firstName: string,
   resetToken: string
 ): Promise<void> {
-  const resetUrl = `${BASE_URL}/reset-password/${resetToken}`;
+  const resetUrl = `${getEmailConfig().baseUrl}/reset-password/${resetToken}`;
 
   const mailOptions = {
-    from: EMAIL_FROM,
+    from: getEmailConfig().from,
     to: email,
     subject: "Επαναφορά Κωδικού - PEQI Haircut Studio",
     html: `
@@ -233,7 +235,7 @@ export async function sendPasswordResetEmail(
   };
 
   try {
-    if (!EMAIL_USER || !EMAIL_PASS) {
+    if (!hasSmtpCredentials()) {
       // Development mode - log email instead of sending
       console.log("📧 [DEV MODE] Password Reset Email:");
       console.log(`To: ${email}`);
@@ -260,7 +262,7 @@ export async function sendPasswordResetEmail(
  */
 export async function sendWelcomeEmail(email: string, firstName: string): Promise<void> {
   const mailOptions = {
-    from: EMAIL_FROM,
+    from: getEmailConfig().from,
     to: email,
     subject: "Καλωσόρισμα στο PEQI! 🎉",
     html: `
@@ -296,7 +298,7 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
                 </ul>
               </div>
               <div style="text-align: center;">
-                <a href="${BASE_URL}/booking" class="button">Κλείσε το Πρώτο σου Ραντεβού</a>
+                <a href="${getEmailConfig().baseUrl}/booking" class="button">Κλείσε το Πρώτο σου Ραντεβού</a>
               </div>
               <p>Ανυπομονούμε να σε δούμε στο κατάστημά μας!</p>
             </div>
@@ -329,7 +331,7 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
   };
 
   try {
-    if (!EMAIL_USER || !EMAIL_PASS) {
+    if (!hasSmtpCredentials()) {
       console.log("📧 [DEV MODE] Welcome Email:");
       console.log(`To: ${email}`);
       console.log(`Subject: ${mailOptions.subject}`);
@@ -370,7 +372,7 @@ export async function sendBroadcastNotificationEmail(
   const safeTitle = escapeHtml(title);
 
   const mailOptions = {
-    from: EMAIL_FROM,
+    from: getEmailConfig().from,
     to,
     subject: `${title} — PEQI`,
     html: `
@@ -397,7 +399,7 @@ export async function sendBroadcastNotificationEmail(
                 ${bodyHtml}
               </div>
               <p style="text-align:center;">
-                <a href="${BASE_URL}/booking" style="display:inline-block;background:#0a0a0a;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:5px;font-weight:bold;">Κλείσε Ραντεβού</a>
+                <a href="${getEmailConfig().baseUrl}/booking" style="display:inline-block;background:#0a0a0a;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:5px;font-weight:bold;">Κλείσε Ραντεβού</a>
               </p>
             </div>
             <div class="footer">
@@ -407,11 +409,11 @@ export async function sendBroadcastNotificationEmail(
         </body>
       </html>
     `,
-    text: `${title}\n\nΓεια σου ${firstName || ""},\n\n${bodyText}\n\n${BASE_URL}`,
+    text: `${title}\n\nΓεια σου ${firstName || ""},\n\n${bodyText}\n\n${getEmailConfig().baseUrl}`,
   };
 
   try {
-    if (!EMAIL_USER || !EMAIL_PASS) {
+    if (!hasSmtpCredentials()) {
       console.log("📧 [DEV MODE] Broadcast email:", to, title);
       return;
     }
@@ -444,7 +446,7 @@ export async function sendAppointmentConfirmationEmail(
   const durationText = duration ? ` (${duration} λεπτά)` : '';
 
   const mailOptions = {
-    from: EMAIL_FROM,
+    from: getEmailConfig().from,
     to: email,
     subject: "Επιβεβαίωση Ραντεβού - PEQI",
     html: `
@@ -490,7 +492,7 @@ export async function sendAppointmentConfirmationEmail(
               <p>Θα λάβεις υπενθύμιση 24 ώρες πριν και 2 ώρες πριν το ραντεβού σου.</p>
               
               <div style="text-align: center;">
-                <a href="${BASE_URL}/appointments" class="button">Δες τα Ραντεβού μου</a>
+                <a href="${getEmailConfig().baseUrl}/appointments" class="button">Δες τα Ραντεβού μου</a>
               </div>
               
               <p>Αν χρειάζεσαι να αλλάξεις ή να ακυρώσεις το ραντεβού σου, μπορείς να το κάνεις από τον λογαριασμό σου.</p>
@@ -526,7 +528,7 @@ export async function sendAppointmentConfirmationEmail(
   };
 
   try {
-    if (!EMAIL_USER || !EMAIL_PASS) {
+    if (!hasSmtpCredentials()) {
       // Development mode - log email instead of sending
       console.log("📧 [DEV MODE] Appointment Confirmation Email:");
       console.log(`To: ${email}`);
@@ -568,7 +570,7 @@ export async function sendAppointmentCancellationEmail(
   });
 
   const mailOptions = {
-    from: EMAIL_FROM,
+    from: getEmailConfig().from,
     to: email,
     subject: "Ακύρωση Ραντεβού - PEQI",
     html: `
@@ -621,7 +623,7 @@ export async function sendAppointmentCancellationEmail(
   };
 
   try {
-    if (!EMAIL_USER || !EMAIL_PASS) {
+    if (!hasSmtpCredentials()) {
       console.log("📧 [DEV MODE] Appointment Cancellation Email:");
       console.log(`To: ${email}, Subject: ${mailOptions.subject}`);
       return;
@@ -655,7 +657,7 @@ export async function sendSameDayReminderEmail(
   const durationText = duration ? ` (${duration} λεπτά)` : '';
 
   const mailOptions = {
-    from: EMAIL_FROM,
+    from: getEmailConfig().from,
     to: email,
     subject: "Υπενθύμιση Ραντεβού - Σήμερα! - PEQI",
     html: `
@@ -703,7 +705,7 @@ export async function sendSameDayReminderEmail(
               <p><strong>Ανυπομονούμε να σε δούμε!</strong></p>
               
               <div style="text-align: center;">
-                <a href="${BASE_URL}/appointments" class="button">Δες τα Ραντεβού μου</a>
+                <a href="${getEmailConfig().baseUrl}/appointments" class="button">Δες τα Ραντεβού μου</a>
               </div>
               
               <p>Αν χρειάζεσαι να ακυρώσεις το ραντεβού σου, παρακαλώ κάνε το το συντομότερο δυνατό.</p>
@@ -741,7 +743,7 @@ export async function sendSameDayReminderEmail(
   };
 
   try {
-    if (!EMAIL_USER || !EMAIL_PASS) {
+    if (!hasSmtpCredentials()) {
       // Development mode - log email instead of sending
       console.log("📧 [DEV MODE] Same-Day Reminder Email:");
       console.log(`To: ${email}`);

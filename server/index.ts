@@ -6,6 +6,7 @@ import cron from "node-cron";
 import { sendNamedayGreetings } from "./services/notifications";
 import { checkAndSendReminders } from "./services/appointmentReminders";
 import { serveStatic, log } from "./utils";
+import { isEmailConfigured } from "./services/email";
 import path from "path";
 import fs from "fs";
 
@@ -104,6 +105,11 @@ app.use((req, res, next) => {
   const port = parseInt(process.env.PORT || '5100', 10);
   server.listen(port, () => {
     log(`serving on port ${port}`);
+    if (isEmailConfigured()) {
+      log("email: SMTP configured (confirmation emails enabled)");
+    } else {
+      log("email: EMAIL_USER/EMAIL_PASS missing — confirmation emails disabled");
+    }
   });
 
   // Schedule daily nameday/birthday greetings

@@ -126,6 +126,10 @@ cat ~/.ssh/github_deploy    # αντιγράψτε — μόνο για secret VP
 | `VPS_SSH_KEY` | ιδιωτικό κλειδί `github_deploy` (ολόκληρο) |
 | `VPS_APP_DIR` | `/var/www/peqi` (προαιρετικό) |
 
+Το workflow **δεν** κάνει πλέον `git pull` στο VPS (συχνά αποτυγχάνει σε private repo). Στέλνει τον κώδικα με **rsync** και τρέχει `deploy/deploy.sh`.
+
+Αν το Actions αποτύχει: δείτε το log του step **Sync files** ή **Run deploy**.
+
 ---
 
 ## 3. Κάθε deploy (εσείς)
@@ -148,6 +152,33 @@ git push origin main
 - `database.sqlite` — δεδομένα (backup ξεχωριστά)
 
 Το `.env` **δεν** ανεβαίνει στο Git (είναι στο `.gitignore`).
+
+### Email επιβεβαίωσης ραντεβού
+
+Στο `/var/www/peqi/.env` **υποχρεωτικά**:
+
+```env
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=peqihaircutstudio@gmail.com
+EMAIL_PASS=xxxx xxxx xxxx xxxx
+EMAIL_FROM="PEQI Haircut Studio <peqihaircutstudio@gmail.com>"
+BASE_URL=https://peqi.hair
+```
+
+`EMAIL_PASS` = [Gmail App Password](https://myaccount.google.com/apppasswords) (όχι τον κωδικό λογαριασμού).
+
+Μετά deploy:
+
+```bash
+cd /var/www/peqi
+npm run test-email
+pm2 logs peqi --lines 30
+```
+
+Στα logs πρέπει: `email: SMTP configured` και `✅ Email SMTP verified`.
+
+PM2 φορτώνει το `.env` μέσω `deploy/ecosystem.config.cjs` — μετά αλλαγή `.env`: `pm2 reload deploy/ecosystem.config.cjs --update-env`.
 
 ---
 
