@@ -172,7 +172,13 @@ BASE_URL=https://peqi.hair
 
 ```bash
 cd /var/www/peqi
-npm run test-email
+# Prefer plain node on VPS (tsx can hang; SMTP verify may timeout ~15s)
+node scripts/test-email.cjs your-inbox@gmail.com
+
+# If port 587 is blocked by Hostman, test connectivity:
+nc -zv smtp.gmail.com 587
+# Try SSL port in .env: EMAIL_PORT=465
+
 pm2 logs peqi --lines 30
 ```
 

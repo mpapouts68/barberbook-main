@@ -22,6 +22,7 @@
     "generate-icons:ps1": "powershell -ExecutionPolicy Bypass -File scripts/generate-icons.ps1",
     "test-pwa": "tsx scripts/test-pwa.js",
     "test-email": "tsx scripts/test-email.ts",
+    "test-email:server": "node scripts/test-email.cjs",
     "deploy-safe": "powershell -ExecutionPolicy Bypass -File SAFE-DEPLOY-UPDATE.ps1"
   },
   "dependencies": {
