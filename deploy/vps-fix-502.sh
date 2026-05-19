@@ -30,6 +30,35 @@ echo "    PORT=${PORT:-?}"
 echo "    DATABASE_URL=${DATABASE_URL:-?}"
 echo "    NODE_ENV=${NODE_ENV:-?}"
 
+DB_FILE="${DATABASE_URL#file:}"
+DB_FILE="${DB_FILE#./}"
+if [[ -f "$DB_FILE" ]]; then
+  echo "    DB file exists: $DB_FILE ($(du -h "$DB_FILE" | cut -f1))"
+  if command -v sqlite3 &>/dev/null; then
+    TABLES=$(sqlite3 "$DB_FILE" "SELECT name FROM sqlite_master WHERE type='table';" 2>/dev/null | tr '\n' ' ')
+    echo "    Tables: ${TABLES:-NONE}"
+    if [[ "$TABLES" != *namedays* ]]; then
+      echo ""
+      echo "    ERROR: 'namedays' table missing in $DB_FILE"
+      echo "    Fix: upload local database.sqlite OR set DATABASE_URL=file:./database.sqlite"
+      echo "         and run: npm run db:push"
+      exit 1
+    fi
+  fi
+else
+  echo "    WARN: DB file not found yet: $DB_FILE (will be created by db:push)"
+fi
+
+# Prefer database.sqlite (local dev file with full schema)
+if [[ "${DATABASE_URL:-}" == *barbershop.db* ]] && [[ -f database.sqlite ]]; then
+  echo "    Fixing .env: barbershop.db -> database.sqlite"
+  sed -i 's|^DATABASE_URL=.*|DATABASE_URL=file:./database.sqlite|' .env
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
+
 echo ""
 echo "==> Install, build, database schema"
 npm ci

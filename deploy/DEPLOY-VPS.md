@@ -257,9 +257,47 @@ cat /var/www/peqi/.env | grep -E '^PORT=|^DATABASE_URL=|^NODE_ENV='
 
 Συχνά αίτια στα logs: λείπει `.env`, λάθος `DATABASE_URL`, αποτυχία `npm run build`, ή crash κατά το startup.
 
+### Ανέβασμα τοπικής `database.sqlite` (προτείνεται αν το `db:push` αποτυγχάνει)
+
+Η τοπική σας βάση έχει ήδη όλους τους πίνακες (`namedays`, `google_calendar_config`, κ.λπ.).
+
+**Από Windows (PowerShell):**
+
+```powershell
+cd "C:\POS\JavaETC\BarberBook - Peqi"
+$env:PEQI_VPS = "root@YOUR_PEQI_VPS_IP"
+.\deploy\upload-database.ps1
+```
+
+**Ή χειροκίνητα:**
+
+```powershell
+scp "C:\POS\JavaETC\BarberBook - Peqi\database.sqlite" root@YOUR_PEQI_VPS_IP:/var/www/peqi/database.sqlite
+```
+
+**Στο VPS μετά το upload:**
+
+```bash
+cd /var/www/peqi
+pm2 stop peqi
+# Στο .env ΠΡΕΠΕΙ να δείχνει στο ίδιο αρχείο:
+grep DATABASE_URL .env
+# DATABASE_URL=file:./database.sqlite
+
+chmod 644 database.sqlite
+pm2 restart peqi
+curl -I http://127.0.0.1:5100
+```
+
+**Σημαντικό:** Αν το `.env` λέει `file:barbershop.db` αλλά ανεβάσατε `database.sqlite`, η εφαρμογή διαβάζει **λάθος αρχείο** (άδειο). Διορθώστε:
+
+```bash
+sed -i 's|^DATABASE_URL=.*|DATABASE_URL=file:./database.sqlite|' .env
+```
+
 ### `SqliteError: no such table: namedays`
 
-Η SQLite υπάρχει αλλά **δεν έχουν δημιουργηθεί οι πίνακες**. Στο VPS:
+Η SQLite υπάρχει αλλά **δεν έχουν δημιουργηθεί οι πίνακες** (ή λάθος αρχείο DB). Στο VPS:
 
 ```bash
 cd /var/www/peqi
