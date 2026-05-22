@@ -31,8 +31,14 @@ fi
 npm ci
 npm run build
 
-echo "==> Applying database schema (drizzle push)..."
+echo "==> Database (production SQLite is NOT overwritten by deploy — only schema/migrations)..."
+if [[ -f "${DATABASE_URL#file:}" ]] || [[ -f "./database.sqlite" ]]; then
+  echo "    Existing DB found — applying additive schema + safe migrations"
+else
+  echo "    WARN: No database.sqlite yet — db:push will create an empty DB"
+fi
 npm run db:push
+npm run migrate:production
 
 if pm2 describe peqi &>/dev/null; then
   pm2 reload deploy/ecosystem.config.cjs --update-env

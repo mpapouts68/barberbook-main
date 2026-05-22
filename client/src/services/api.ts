@@ -22,7 +22,7 @@ export const api = {
     clientFirstName: string;
     clientLastName?: string;
     clientEmail?: string;
-    clientPhone?: string;
+    clientPhone: string;
     employeeId?: string;
     service: string;
     barber?: string;

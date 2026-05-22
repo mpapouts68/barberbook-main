@@ -44,8 +44,8 @@ export default function Login() {
       : `Συνδεόμενοι, συμφωνείτε με τους όρους υπηρεσίας του ${brandFullName}`,
     guestBook: isEnglish ? "Book without signing in" : "Κλείσε ραντεβού χωρίς εγγραφή",
     guestBookHint: isEnglish
-      ? "Name and phone only — email optional"
-      : "Όνομα και τηλέφωνο — το email είναι προαιρετικό",
+      ? "Name and phone with country code (e.g. +30…) — email optional"
+      : "Όνομα και τηλέφωνο με κωδικό χώρας (π.χ. +30…) — το email προαιρετικό",
   };
 
   // Check if OAuth is configured (public endpoint, no auth needed)

@@ -43,6 +43,9 @@ jobs:
             -e "$RSYNC_SSH" \
             ./ "${VPS_USER}@${VPS_HOST}:${APP_DIR}/"
 
+      # database.sqlite / barbershop.db are excluded from rsync — production data stays on VPS.
+      # deploy.sh runs db:push + migrate:production (additive only).
+
       - name: Run deploy on VPS
         uses: appleboy/ssh-action@v1.2.0
         with:

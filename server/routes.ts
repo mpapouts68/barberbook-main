@@ -575,6 +575,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      if (!clientPhone?.trim()) {
+        return res.status(400).json({
+          message:
+            "Το τηλέφωνο είναι υποχρεωτικό με κωδικό χώρας (π.χ. +30…) / Phone is required with country code (e.g. +30…)",
+        });
+      }
+
       const { appointment } = await createGuestAppointment({
         clientFirstName,
         clientLastName,
@@ -603,7 +610,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message.includes("conflict") ||
         message.includes("closed")
           ? 409
-          : message.includes("Missing") || message.includes("required")
+          : message.includes("Missing") ||
+              message.includes("required") ||
+              message.includes("τηλέφωνο") ||
+              message.includes("phone") ||
+              message.includes("Phone")
             ? 400
             : 500;
       console.error("Guest booking error:", error);

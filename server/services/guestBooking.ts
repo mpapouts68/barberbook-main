@@ -10,12 +10,13 @@ import { createCalendarEvent, getCalendarEvents } from "../googleCalendar";
 import { sendAppointmentConfirmationEmail } from "./email";
 import { addMinutesToTime, getWorkingHoursRanges, timeSlotsOverlap } from "../schedulingUtils";
 import { findFirstAvailableEmployee } from "./employeeAvailability";
+import { validateInternationalPhone } from "@shared/phoneValidation";
 
 export type GuestBookingInput = {
   clientFirstName: string;
   clientLastName?: string;
   clientEmail?: string;
-  clientPhone?: string;
+  clientPhone: string;
   employeeId?: string;
   service: string;
   barber?: string;
@@ -30,7 +31,7 @@ export async function createGuestAppointment(input: GuestBookingInput) {
     clientFirstName,
     clientLastName = "",
     clientEmail,
-    clientPhone = "",
+    clientPhone,
     employeeId,
     service,
     date,
@@ -43,6 +44,12 @@ export async function createGuestAppointment(input: GuestBookingInput) {
     throw new Error("Missing required fields: first name, service, date, and time");
   }
 
+  const phoneCheck = validateInternationalPhone(clientPhone ?? "");
+  if (!phoneCheck.ok) {
+    throw new Error(phoneCheck.message);
+  }
+  const normalizedPhone = phoneCheck.normalized;
+
   let user;
   const trimmedEmail = clientEmail?.trim();
   if (trimmedEmail) {
@@ -54,7 +61,7 @@ export async function createGuestAppointment(input: GuestBookingInput) {
         firstName: clientFirstName.trim(),
         lastName: clientLastName?.trim() || "",
         email: trimmedEmail,
-        phone: clientPhone,
+        phone: normalizedPhone,
         password: undefined,
         role: "customer",
         emailVerified: false,
@@ -67,7 +74,7 @@ export async function createGuestAppointment(input: GuestBookingInput) {
       firstName: clientFirstName.trim(),
       lastName: clientLastName?.trim() || "",
       email: placeholderEmail,
-      phone: clientPhone,
+      phone: normalizedPhone,
       password: undefined,
       role: "customer",
       emailVerified: false,

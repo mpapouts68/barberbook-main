@@ -384,14 +384,23 @@ pm2 logs peqi --lines 20
 
 ---
 
-## Υπηρεσίες δίγλωσσες (GR / EN)
+## Βάση δεδομένων (διατήρηση production)
 
-Μετά deploy που προσθέτει `name_en` / `description_en`:
+- Το **GitHub Actions rsync** **δεν** αντιγράφει `database.sqlite` / `barbershop.db` στο VPS — τα δεδομένα παραμένουν στο server.
+- Κάθε deploy τρέχει `deploy/deploy.sh`, που κάνει μόνο **προσθετικές** αλλαγές:
+  - `npm run db:push` (νέες στήλες/πίνακες από Drizzle)
+  - `npm run migrate:production` (`fix-schema`, `migrate-reminders`, `migrate:services-i18n` — idempotent, δεν διαγράφουν ραντεβού/χρήστες)
+- **Μην** τρέχετε `npm run rebuild-db` ή `npm run seed` στο production.
+
+Χειροκίνητα (αν χρειαστεί):
 
 ```bash
 cd /var/www/peqi
-npm run migrate:services-i18n
+set -a && source .env && set +a
+npm run migrate:production
 pm2 reload deploy/ecosystem.config.cjs --update-env
 ```
 
-Στο **Admin → Services** επεξεργάζεστε Ελληνικά (`name`, `description`) και English (`name_en`, `description_en`). Στο booking / dashboard / TV, το GR/EN switch εμφανίζει την κατάλληλη γλώσσα.
+## Υπηρεσίες δίγλωσσες (GR / EN)
+
+Περιλαμβάνεται στο `migrate:production` (`name_en`, `description_en`). Στο **Admin → Services** επεξεργάζεστε Ελληνικά και English. Το GR/EN switch στο booking εμφανίζει την κατάλληλη γλώσσα.

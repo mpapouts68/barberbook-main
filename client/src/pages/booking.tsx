@@ -14,8 +14,12 @@ import { Calendar } from "lucide-react";
 import { AppointmentCalendar } from "@/components/AppointmentCalendar";
 import type { InsertAppointment, Employee } from "@shared/schema";
 import { useLanguage } from "@/context/language-context";
-import LanguageSwitcher from "@/components/language-switcher";
 import { getServiceDescription, getServiceLabel, getServiceName } from "@/lib/serviceLabels";
+import {
+  isValidInternationalPhone,
+  normalizeInternationalPhone,
+  validateInternationalPhone,
+} from "@shared/phoneValidation";
 
 export default function Booking() {
   const { user } = useAuth();
@@ -55,12 +59,16 @@ export default function Booking() {
     bookingError: isEnglish ? "Failed to book appointment. Please try again." : "Αποτυχία κλεισίματος ραντεβού. Παρακαλώ προσπαθήστε ξανά.",
     guestTitle: isEnglish ? "BOOK AS GUEST" : "ΚΛΕΙΣΕ ΩΣ ΕΠΙΣΚΕΠΤΗΣ",
     guestSubtitle: isEnglish
-      ? "No account needed — email is optional"
-      : "Χωρίς λογαριασμό — το email είναι προαιρετικό",
+      ? "No account needed — phone with country code is required (email optional)"
+      : "Χωρίς λογαριασμό — υποχρεωτικό τηλέφωνο με κωδικό χώρας (το email προαιρετικό)",
     firstName: isEnglish ? "FIRST NAME" : "ΟΝΟΜΑ",
     lastName: isEnglish ? "LAST NAME (optional)" : "ΕΠΩΝΥΜΟ (προαιρετικό)",
     emailOptional: isEnglish ? "EMAIL (optional)" : "EMAIL (προαιρετικό)",
-    phoneOptional: isEnglish ? "PHONE (optional)" : "ΤΗΛΕΦΩΝΟ (προαιρετικό)",
+    phone: isEnglish ? "PHONE *" : "ΤΗΛΕΦΩΝΟ *",
+    phoneHint: isEnglish
+      ? "International format with country code, e.g. +306912345678"
+      : "Διεθνής μορφή με κωδικό χώρας, π.χ. +306912345678",
+    phonePlaceholder: "+306912345678",
     guestNameRequired: isEnglish ? "Please enter your first name." : "Παρακαλώ συμπληρώστε το όνομά σας.",
     guestSuccess: isEnglish
       ? "Your appointment is confirmed. See you soon!"
@@ -176,6 +184,18 @@ export default function Booking() {
       return;
     }
 
+    if (isGuest) {
+      const phoneCheck = validateInternationalPhone(guest.phone);
+      if (!phoneCheck.ok) {
+        toast({
+          title: text.errorTitle,
+          description: phoneCheck.message,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     if (!booking.service || !booking.date || !booking.time) {
       toast({
         title: text.errorTitle,
@@ -205,7 +225,7 @@ export default function Booking() {
         clientFirstName: guest.firstName.trim(),
         clientLastName: guest.lastName.trim(),
         clientEmail: guest.email.trim() || undefined,
-        clientPhone: guest.phone.trim(),
+        clientPhone: normalizeInternationalPhone(guest.phone),
         employeeId: booking.employeeId || "",
         service: booking.service,
         barber: barberName,
@@ -311,12 +331,7 @@ export default function Booking() {
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-      <div className="text-center mb-8 relative">
-        {isGuest && (
-          <div className="absolute right-0 top-0">
-            <LanguageSwitcher />
-          </div>
-        )}
+      <div className="text-center mb-8">
         <h2 className="font-oswald text-3xl font-bold text-whiskey mb-2">
           {isGuest ? text.guestTitle : text.title}
         </h2>
@@ -383,15 +398,20 @@ export default function Booking() {
                     </div>
                     <div>
                       <Label htmlFor="guestPhone" className="text-whiskey font-semibold mb-2 block">
-                        {text.phoneOptional}
+                        {text.phone}
                       </Label>
                       <Input
                         id="guestPhone"
                         type="tel"
+                        inputMode="tel"
+                        autoComplete="tel"
+                        required
+                        placeholder={text.phonePlaceholder}
                         value={guest.phone}
                         onChange={(e) => setGuest({ ...guest, phone: e.target.value })}
                         className="bg-charcoal border-steel text-white focus:border-whiskey"
                       />
+                      <p className="text-xs text-gray-500 mt-1">{text.phoneHint}</p>
                     </div>
                   </div>
                 </div>
@@ -670,7 +690,8 @@ export default function Booking() {
                     !booking.service ||
                     !booking.date ||
                     !booking.time ||
-                    (isGuest && !guest.firstName.trim())
+                    (isGuest &&
+                      (!guest.firstName.trim() || !isValidInternationalPhone(guest.phone)))
                   }
                   className="flex-1 whiskey-gradient hover:opacity-90 text-black font-semibold shine-effect disabled:opacity-50"
                 >
