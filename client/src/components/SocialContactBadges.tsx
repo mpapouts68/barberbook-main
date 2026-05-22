@@ -1,9 +1,15 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FaInstagram, FaFacebook } from "react-icons/fa";
-import { MapPin, Phone } from "lucide-react";
+import { ChevronDown, Mail, MapPin, Phone } from "lucide-react";
 import { contactLinks } from "@/lib/branding";
 import { useLanguage } from "@/context/language-context";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type CompanyInfo = {
   phone?: string | null;
@@ -15,8 +21,32 @@ function telHref(phone: string) {
   return `tel:${digits}`;
 }
 
-function mapsHref(address: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+const badgeClass =
+  "inline-flex items-center justify-center w-10 h-10 rounded-full border border-steel/80 bg-charcoal/80 text-whiskey hover:bg-whiskey hover:text-black hover:border-whiskey transition-all duration-200 shadow-sm";
+
+function ContactBadge({
+  href,
+  label,
+  icon,
+  external = false,
+}: {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  external?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
+      title={label}
+      aria-label={label}
+      className={badgeClass}
+    >
+      {icon}
+    </a>
+  );
 }
 
 export default function SocialContactBadges({ className = "" }: { className?: string }) {
@@ -32,72 +62,99 @@ export default function SocialContactBadges({ className = "" }: { className?: st
     staleTime: 5 * 60 * 1000,
   });
 
-  const phone = contactLinks.phone || company?.phone || "";
+  const phones =
+    contactLinks.phones.length > 0
+      ? contactLinks.phones
+      : company?.phone
+        ? [company.phone]
+        : [];
   const address = contactLinks.address || company?.address || "";
-  const instagram = contactLinks.instagram;
-  const facebook = contactLinks.facebook;
+  const mapsHref = contactLinks.mapsUrl;
+  const email = contactLinks.email;
 
-  const items: {
-    key: string;
-    href: string;
-    label: string;
-    icon: ReactNode;
-    external?: boolean;
-  }[] = [];
+  const phoneLabel = isEnglish ? "Phone numbers" : "Τηλέφωνα";
+  const emailLabel = isEnglish ? "Email" : "Email";
+  const locationLabel = isEnglish ? "Open in Google Maps" : "Άνοιγμα στο Google Maps";
 
-  if (instagram) {
-    items.push({
-      key: "instagram",
-      href: instagram,
-      label: "Instagram",
-      icon: <FaInstagram className="w-4 h-4" />,
-      external: true,
-    });
-  }
-  if (facebook) {
-    items.push({
-      key: "facebook",
-      href: facebook,
-      label: "Facebook",
-      icon: <FaFacebook className="w-4 h-4" />,
-      external: true,
-    });
-  }
-  if (address) {
-    items.push({
-      key: "location",
-      href: contactLinks.mapsUrl || mapsHref(address),
-      label: isEnglish ? "Location" : "Τοποθεσία",
-      icon: <MapPin className="w-4 h-4" />,
-      external: true,
-    });
-  }
-  if (phone) {
-    items.push({
-      key: "phone",
-      href: telHref(phone),
-      label: isEnglish ? "Call" : "Τηλέφωνο",
-      icon: <Phone className="w-4 h-4" />,
-    });
-  }
+  const hasAny =
+    contactLinks.instagram ||
+    contactLinks.facebook ||
+    email ||
+    address ||
+    phones.length > 0;
 
-  if (items.length === 0) return null;
+  if (!hasAny) return null;
 
   return (
     <div className={`flex flex-wrap items-center justify-center gap-2 ${className}`}>
-      {items.map((item) => (
-        <a
-          key={item.key}
-          href={item.href}
-          target={item.external ? "_blank" : undefined}
-          rel={item.external ? "noopener noreferrer" : undefined}
-          title={item.label}
-          aria-label={item.label}
-          className="inline-flex items-center justify-center w-10 h-10 rounded-full border border-steel/80 bg-charcoal/80 text-whiskey hover:bg-whiskey hover:text-black hover:border-whiskey transition-all duration-200 shadow-sm"
-        >
-          {item.icon}
-        </a>
-      ))}
+      {contactLinks.instagram && (
+        <ContactBadge
+          href={contactLinks.instagram}
+          label="Instagram"
+          icon={<FaInstagram className="w-4 h-4" />}
+          external
+        />
+      )}
+      {contactLinks.facebook && (
+        <ContactBadge
+          href={contactLinks.facebook}
+          label="Facebook"
+          icon={<FaFacebook className="w-4 h-4" />}
+          external
+        />
+      )}
+      {email && (
+        <ContactBadge
+          href={`mailto:${email}`}
+          label={emailLabel}
+          icon={<Mail className="w-4 h-4" />}
+        />
+      )}
+      {address && (
+        <ContactBadge
+          href={mapsHref}
+          label={locationLabel}
+          icon={<MapPin className="w-4 h-4" />}
+          external
+        />
+      )}
+      {phones.length === 1 && (
+        <ContactBadge
+          href={telHref(phones[0])}
+          label={phoneLabel}
+          icon={<Phone className="w-4 h-4" />}
+        />
+      )}
+      {phones.length > 1 && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              title={phoneLabel}
+              aria-label={phoneLabel}
+              className={`${badgeClass} gap-0.5 px-2 w-auto min-w-[2.5rem]`}
+            >
+              <Phone className="w-4 h-4 shrink-0" />
+              <ChevronDown className="w-3 h-3 shrink-0 opacity-80" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="center"
+            className="bg-charcoal border-steel text-white min-w-[12rem]"
+          >
+            {phones.map((phone) => (
+              <DropdownMenuItem key={phone} asChild>
+                <a
+                  href={telHref(phone)}
+                  className="cursor-pointer font-mono text-sm focus:bg-steel focus:text-white"
+                >
+                  {phone}
+                </a>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import SocialContactBadges from "@/components/SocialContactBadges";
 import { brandLogo, brandLogoAlt, brandName, brandTagline } from "@/lib/branding";
 
 interface SplashScreenProps {
@@ -41,7 +42,9 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
           {brandName}
         </h1>
         <p className="text-gray-400 font-light tracking-[0.35em] uppercase">{brandTagline}</p>
-        
+
+        <SocialContactBadges className="mt-6" />
+
         {/* Loading indicator */}
         <div className="mt-8 w-16 h-1 whiskey-gradient mx-auto rounded-full animate-pulse-whiskey"></div>
       </div>
