@@ -6,6 +6,8 @@ const sampleServices = [
   {
     name: "Κούρεμα",
     description: "Κλασικό κούρεμα με μηχανή και ψαλίδι",
+    nameEn: "Haircut",
+    descriptionEn: "Classic haircut with clippers and scissors",
     price: 15,
     duration: 30,
     isActive: true,
@@ -13,6 +15,8 @@ const sampleServices = [
   {
     name: "Κούρεμα + Πώληση",
     description: "Κούρεμα με πώληση και styling",
+    nameEn: "Haircut + Beard",
+    descriptionEn: "Haircut with beard trim and styling",
     price: 25,
     duration: 45,
     isActive: true,
@@ -20,6 +24,8 @@ const sampleServices = [
   {
     name: "Πώληση",
     description: "Πώληση γενειάδας με hot towel",
+    nameEn: "Beard Trim",
+    descriptionEn: "Beard trim with hot towel",
     price: 12,
     duration: 20,
     isActive: true,
@@ -27,6 +33,8 @@ const sampleServices = [
   {
     name: "Κούρεμα + Πώληση + Μπανάκι",
     description: "Πλήρης περιποίηση με μπανάκι και styling",
+    nameEn: "Haircut + Beard + Shampoo",
+    descriptionEn: "Full grooming with shampoo and styling",
     price: 35,
     duration: 60,
     isActive: true,
@@ -34,6 +42,8 @@ const sampleServices = [
   {
     name: "Fade Cut",
     description: "Σύγχρονο fade κούρεμα με gradient",
+    nameEn: "Fade Cut",
+    descriptionEn: "Modern fade haircut with gradient",
     price: 20,
     duration: 40,
     isActive: true,
@@ -41,6 +51,8 @@ const sampleServices = [
   {
     name: "Beard Trim",
     description: "Στολίδι γενειάδας με styling",
+    nameEn: "Beard Trim",
+    descriptionEn: "Beard shaping and styling",
     price: 10,
     duration: 15,
     isActive: true,
@@ -48,6 +60,8 @@ const sampleServices = [
   {
     name: "Hair Wash",
     description: "Πλύσιμο μαλλιών με premium products",
+    nameEn: "Hair Wash",
+    descriptionEn: "Hair wash with premium products",
     price: 8,
     duration: 15,
     isActive: true,
@@ -55,6 +69,8 @@ const sampleServices = [
   {
     name: "Hair Styling",
     description: "Styling μαλλιών με styling products",
+    nameEn: "Hair Styling",
+    descriptionEn: "Hair styling with premium products",
     price: 12,
     duration: 20,
     isActive: true,
@@ -153,6 +169,8 @@ async function seed() {
           await storage.updateService(existing.id, { 
             name: service.name,
             description: service.description,
+            nameEn: service.nameEn,
+            descriptionEn: service.descriptionEn,
             price: service.price,
             duration: service.duration,
             isActive: true 

@@ -5,6 +5,7 @@ import { api } from "@/services/api";
 import { Scissors, Calendar, Clock } from "lucide-react";
 import type { Appointment } from "@shared/schema";
 import { useLanguage } from "@/context/language-context";
+import { resolveServiceName } from "@/lib/serviceLabels";
 
 interface AppointmentListProps {
   appointments: Appointment[];
@@ -109,15 +110,8 @@ export default function AppointmentList({ appointments, showActions = true }: Ap
     return appointment.barber;
   };
 
-  const getServiceName = (appointment: Appointment) => {
-    // If service field contains a UUID (service ID), look up the service name
-    if (appointment.service && appointment.service.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      const service = services.find((svc: any) => svc.id === appointment.service);
-      return service?.name || appointment.service;
-    }
-    // If service field contains a name, use it directly
-    return appointment.service;
-  };
+  const getServiceName = (appointment: Appointment) =>
+    resolveServiceName(appointment.service, services, isEnglish);
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString(localeCode, {

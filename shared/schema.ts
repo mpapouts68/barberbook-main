@@ -168,6 +168,8 @@ export const services = sqliteTable("services", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   description: text("description"),
+  nameEn: text("name_en"),
+  descriptionEn: text("description_en"),
   price: real("price").notNull(),
   duration: integer("duration").notNull().default(30), // in minutes
   isActive: integer("is_active", { mode: 'boolean' }).notNull().default(true),

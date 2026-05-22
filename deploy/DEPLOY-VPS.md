@@ -381,3 +381,17 @@ pm2 logs peqi --lines 20
 ## Σημείωση
 
 Το `peqi.hair` είναι **ξεχωριστό VPS** από άλλα projects (π.χ. shishapoint) — δικό του IP, DNS, `.env`.
+
+---
+
+## Υπηρεσίες δίγλωσσες (GR / EN)
+
+Μετά deploy που προσθέτει `name_en` / `description_en`:
+
+```bash
+cd /var/www/peqi
+npm run migrate:services-i18n
+pm2 reload deploy/ecosystem.config.cjs --update-env
+```
+
+Στο **Admin → Services** επεξεργάζεστε Ελληνικά (`name`, `description`) και English (`name_en`, `description_en`). Στο booking / dashboard / TV, το GR/EN switch εμφανίζει την κατάλληλη γλώσσα.

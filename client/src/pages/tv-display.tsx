@@ -12,6 +12,8 @@ import { format, addDays, subDays } from "date-fns";
 import { el } from "date-fns/locale";
 import type { Appointment } from "@shared/schema";
 import { brandLogo, brandLogoAlt } from "@/lib/branding";
+import { getServiceLabel, getServiceName, resolveServiceName } from "@/lib/serviceLabels";
+import { useLanguage } from "@/context/language-context";
 import {
   ScheduleComponent,
   Day,
@@ -27,6 +29,45 @@ import "@/scheduler-tv-overrides.css";
 interface WorkingHoursRange {
   start: string;
   end: string;
+}
+
+const NO_PREFERENCE_LABELS = new Set([
+  "",
+  "Χωρίς προτίμηση",
+  "No preference",
+  "Αυτόματη Ανάθεση",
+  "Auto assign",
+]);
+
+/** Syncfusion needs a real employee UUID — not barber label text */
+function resolveScheduleEmployeeId(
+  apt: Appointment,
+  employees: Array<{ id: string; name: string }>,
+): string {
+  const id = apt.employeeId?.trim();
+  if (id && employees.some((e) => e.id === id)) {
+    return id;
+  }
+
+  const barber = apt.barber?.trim() || "";
+  if (barber && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(barber)) {
+    if (employees.some((e) => e.id === barber)) {
+      return barber;
+    }
+  }
+
+  if (barber && !NO_PREFERENCE_LABELS.has(barber)) {
+    const byName = employees.find(
+      (e) =>
+        e.name === barber ||
+        e.name.toLowerCase() === barber.toLowerCase(),
+    );
+    if (byName) {
+      return byName.id;
+    }
+  }
+
+  return employees[0]?.id ?? "";
 }
 
 function normalizeWorkingHours(hours: any): Array<WorkingHoursRange> | null {
@@ -83,6 +124,7 @@ function getDayHours(workingHours: any, date: Date): {
 }
 
 export default function TVDisplay() {
+  const { isEnglish } = useLanguage();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const today = new Date();
@@ -232,6 +274,10 @@ export default function TVDisplay() {
 
   // Convert appointments to Syncfusion event format
   const scheduleEvents = useMemo(() => {
+    const employeeList = activeEmployees.map((emp: { id: string; name: string }) => ({
+      id: emp.id,
+      name: emp.name,
+    }));
     return safeAppointments
       .filter((apt) => apt.status !== "cancelled")
       .map((apt) => {
@@ -239,8 +285,10 @@ export default function TVDisplay() {
         const start = new Date(selectedDate);
         start.setHours(h, m, 0, 0);
         const end = new Date(start.getTime() + (apt.duration || 30) * 60000);
-        const serviceName =
-          allServices.find((s: any) => s?.id === apt.service)?.name || apt.service;
+        const svc = allServices.find((s: { id?: string }) => s?.id === apt.service);
+        const serviceName = svc
+          ? getServiceName(svc, isEnglish)
+          : apt.service;
         const clientName = (apt as any).clientFirstName || (apt as any).clientLastName
           ? `${(apt as any).clientFirstName || ""} ${(apt as any).clientLastName || ""}`.trim()
           : users.find((u: any) => u.id === apt.userId)
@@ -253,14 +301,14 @@ export default function TVDisplay() {
           Subject: `${serviceName} • ${clientName}`,
           StartTime: start,
           EndTime: end,
-          EmployeeId: apt.employeeId || apt.barber,
+          EmployeeId: resolveScheduleEmployeeId(apt, employeeList),
           IsAllDay: false,
           barberbookAppointment: apt,
           barberbookCompleted: isCompleted,
           barberbookGoogle: !!isGoogle,
         };
       });
-  }, [safeAppointments, selectedDate, allServices, users, isToday, currentTime]);
+  }, [safeAppointments, selectedDate, allServices, users, isToday, currentTime, activeEmployees, isEnglish]);
 
   const dayHours = useMemo(
     () => getDayHours(workingHours, selectedDate),
@@ -356,16 +404,12 @@ export default function TVDisplay() {
     return appointment.barber || "Αυτόματη Ανάθεση";
   };
 
-  const getServiceName = (appointment: Appointment) => {
-    if (!appointment.service) return "Unknown Service";
-    if (appointment.service.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      // Ensure allServices is available and is an array
-      const servicesList = Array.isArray(allServices) ? allServices : [];
-      const service = servicesList.find((svc: any) => svc && svc.id === appointment.service);
-      return service?.name || appointment.service;
-    }
-    return appointment.service;
-  };
+  const getServiceNameForAppointment = (appointment: Appointment) =>
+    resolveServiceName(
+      appointment.service,
+      Array.isArray(allServices) ? allServices : [],
+      isEnglish,
+    );
 
   const getClientName = (appointment: Appointment) => {
     // Prefer client name from API (enriched from users table)
@@ -966,7 +1010,7 @@ export default function TVDisplay() {
                   <SelectContent className="bg-charcoal border-steel">
                     {bookingServices.map((service: any) => (
                       <SelectItem key={service.id} value={service.id} className="text-white focus:bg-steel">
-                        {service.name} {service.description ? `- ${service.description}` : ""}
+                        {getServiceLabel(service, isEnglish, { includeDescription: true })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -1035,7 +1079,7 @@ export default function TVDisplay() {
             <DialogDescription className="text-gray-400">
               {appointmentActionTarget && (
                 <>
-                  <p>{appointmentActionTarget.time} • {getServiceName(appointmentActionTarget)}</p>
+                  <p>{appointmentActionTarget.time} • {getServiceNameForAppointment(appointmentActionTarget)}</p>
                   <p>{getClientName(appointmentActionTarget)}</p>
                 </>
               )}

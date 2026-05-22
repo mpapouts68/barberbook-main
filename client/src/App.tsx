@@ -65,6 +65,7 @@ function AppContent() {
     location === "/register" ||
     location === "/forgot-password" ||
     location === "/verify-email-sent" ||
+    location === "/booking" ||
     location.startsWith("/reset-password/") ||
     location.startsWith("/verify-email/");
 
@@ -120,11 +121,7 @@ function AppContent() {
           </ProtectedRoute>
         </Route>
         
-        <Route path="/booking">
-          <ProtectedRoute>
-            <Booking />
-          </ProtectedRoute>
-        </Route>
+        <Route path="/booking" component={Booking} />
         
         <Route path="/appointments">
           <ProtectedRoute>

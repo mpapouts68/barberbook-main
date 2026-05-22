@@ -8,6 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/auth-context";
 import { api } from "@/services/api";
+import { useLanguage } from "@/context/language-context";
+import { getServiceLabel } from "@/lib/serviceLabels";
 import type { InsertAppointment } from "@shared/schema";
 
 interface AppointmentFormProps {
@@ -16,6 +18,7 @@ interface AppointmentFormProps {
 
 export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
   const { user } = useAuth();
+  const { isEnglish } = useLanguage();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -90,7 +93,7 @@ export default function AppointmentForm({ onSuccess }: AppointmentFormProps) {
     .filter((service: any) => service.isActive)
     .map((service: any) => ({
       value: service.id,
-      label: `${service.name} - $${service.price}`,
+      label: `${getServiceLabel(service, isEnglish)} - $${service.price}`,
       duration: service.duration,
     }));
 

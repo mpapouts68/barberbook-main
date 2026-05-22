@@ -11,6 +11,7 @@ interface TimeSlot {
   time: string;
   available: boolean;
   employeeId?: string;
+  employeeName?: string;
 }
 
 interface WorkingHours {
@@ -66,10 +67,15 @@ interface WorkingHoursConfig {
 interface AppointmentCalendarProps {
   selectedEmployeeId: string;
   selectedService: string;
-  onTimeSelect: (date: string, time: string) => void;
+  onTimeSelect: (
+    date: string,
+    time: string,
+    assignee?: { employeeId: string; employeeName: string },
+  ) => void;
   selectedDate?: string;
   selectedTime?: string;
   employees?: Array<{id: string; name: string; specialties: string[]}>;
+  slotDuration?: number;
 }
 
 // Dummy busy slots for demonstration - in real implementation this would come from Google Calendar API
@@ -85,7 +91,8 @@ export function AppointmentCalendar({
   onTimeSelect,
   selectedDate,
   selectedTime,
-  employees = []
+  employees = [],
+  slotDuration = 30,
 }: AppointmentCalendarProps) {
   const { isEnglish, dateLocale } = useLanguage();
   const [currentWeek, setCurrentWeek] = useState(new Date());
@@ -101,6 +108,10 @@ export function AppointmentCalendar({
     technician: isEnglish ? "Barber:" : "Τεχνικός:",
     selectedBarber: isEnglish ? "Selected barber" : "Επιλεγμένος Κομμωτής",
     noPreference: isEnglish ? "No preference" : "Χωρίς προτίμηση",
+    autoAssignedBarber: isEnglish ? "Assigned barber" : "Ανατεθειμένος κομμωτής",
+    noPreferenceSlotHint: isEnglish
+      ? "First available barber is assigned when you pick a time"
+      : "Ανατίθεται ο πρώτος διαθέσιμος κομμωτής όταν επιλέγετε ώρα",
     previousWeek: isEnglish ? "← Previous Week" : "← Προηγούμενη Εβδομάδα",
     nextWeek: isEnglish ? "Next Week →" : "Επόμενη Εβδομάδα →",
     availableHours: isEnglish ? "AVAILABLE TIMES" : "ΔΙΑΘΕΣΙΜΕΣ ΩΡΕΣ",
@@ -225,7 +236,7 @@ export function AppointmentCalendar({
   // CRITICAL: Refreshes immediately when employee changes
   const dateStr = selectedCalendarDate ? format(selectedCalendarDate, "yyyy-MM-dd") : null;
   const { data: employeeAvailability = [], isLoading: isLoadingAvailability, error: availabilityError } = useQuery({
-    queryKey: ["/api/employees", selectedEmployeeId, "availability", dateStr],
+    queryKey: ["/api/employees", selectedEmployeeId, "availability", dateStr, slotDuration],
     queryFn: async () => {
       if (!hasEmployeeSelected || !selectedCalendarDate || !dateStr) {
         console.log("Skipping availability fetch - missing requirements");
@@ -233,7 +244,9 @@ export function AppointmentCalendar({
       }
       try {
         console.log(`🔄 Fetching availability for employee ${selectedEmployeeId} on ${dateStr}`);
-        const response = await fetch(`/api/employees/${selectedEmployeeId}/availability?date=${dateStr}&duration=30`);
+        const response = await fetch(
+          `/api/employees/${selectedEmployeeId}/availability?date=${dateStr}&duration=${slotDuration}`,
+        );
         if (!response.ok) {
           const errorText = await response.text();
           console.error(`Failed to fetch availability for employee ${selectedEmployeeId} on ${dateStr}:`, response.status, errorText);
@@ -258,16 +271,32 @@ export function AppointmentCalendar({
     retry: 1,
   });
 
-  // Fallback: Fetch all appointments for the selected date (when no employee selected)
   const { data: existingAppointments = [] } = useQuery({
-    queryKey: ["/api/appointments/date", selectedCalendarDate],
+    queryKey: ["/api/appointments/date", dateStr],
     queryFn: async () => {
-      if (!selectedCalendarDate) return [];
-      const response = await fetch(`/api/appointments/date/${format(selectedCalendarDate, "yyyy-MM-dd")}`);
+      if (!dateStr) return [];
+      const response = await fetch(`/api/appointments/date/${dateStr}`);
       if (!response.ok) throw new Error("Failed to fetch appointments");
       return response.json();
     },
-    enabled: !!selectedCalendarDate && !selectedEmployeeId,
+    enabled: Boolean(hasEmployeeSelected && dateStr),
+  });
+
+  // No preference: merged availability (first free barber per slot)
+  const { data: noPreferenceAvailability = [], isLoading: isLoadingNoPreference } = useQuery({
+    queryKey: ["/api/availability/no-preference", dateStr, slotDuration],
+    queryFn: async () => {
+      if (!dateStr) return [];
+      const response = await fetch(
+        `/api/availability/no-preference?date=${dateStr}&duration=${slotDuration}`,
+      );
+      if (!response.ok) return [];
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: Boolean(!hasEmployeeSelected && selectedCalendarDate && dateStr),
+    staleTime: 0,
+    refetchOnMount: true,
   });
 
   // Helper functions using dynamic working hours
@@ -752,13 +781,28 @@ export function AppointmentCalendar({
             }
           }
           // If loading, keep current slots or empty
-        } else if (!isLoadingWorkingHours && Object.keys(workingHours).length > 0) {
-          // No employee selected, use shop hours and all appointments
-          console.log(`📅 No employee selected, using shop hours. Working hours:`, workingHours);
-          const slots = generateTimeSlots(selectedCalendarDate);
-          const dateStr = format(selectedCalendarDate, "yyyy-MM-dd");
-          console.log(`📅 Shop hours slots for ${dateStr}:`, slots.length, "All slots:", slots.map(s => s.time));
-          setAvailableSlots(slots);
+        } else if (!hasEmployeeSelected) {
+          if (isLoadingNoPreference) {
+            setAvailableSlots([]);
+          } else if (
+            noPreferenceAvailability &&
+            Array.isArray(noPreferenceAvailability) &&
+            noPreferenceAvailability.length > 0
+          ) {
+            const slots: TimeSlot[] = noPreferenceAvailability.map((slot: { start: string; available: boolean; employeeId?: string; employeeName?: string }) => ({
+              time: slot.start,
+              available: slot.available !== false,
+              employeeId: slot.employeeId,
+              employeeName: slot.employeeName,
+            }));
+            setAvailableSlots(slots);
+          } else if (!isLoadingWorkingHours && Object.keys(workingHours).length > 0) {
+            setAvailableSlots([]);
+          } else if (isLoadingWorkingHours) {
+            setAvailableSlots([]);
+          } else {
+            setAvailableSlots([]);
+          }
         } else if (isLoadingWorkingHours) {
           // Still loading working hours
           console.log(`⏳ Still loading working hours...`);
@@ -775,7 +819,7 @@ export function AppointmentCalendar({
       setError(err.message || "Error updating available slots");
       setAvailableSlots([]);
     }
-  }, [selectedCalendarDate, selectedEmployeeId, hasEmployeeSelected, workingHours, existingAppointments, employeeAvailability, isLoadingWorkingHours, isLoadingAvailability, availabilityError, selectedEmployee]);
+  }, [selectedCalendarDate, selectedEmployeeId, hasEmployeeSelected, workingHours, employeeAvailability, isLoadingWorkingHours, isLoadingAvailability, availabilityError, selectedEmployee, noPreferenceAvailability, isLoadingNoPreference]);
 
   const handleDateSelect = (date: Date) => {
     try {
@@ -795,7 +839,15 @@ export function AppointmentCalendar({
     try {
       if (selectedCalendarDate) {
         const dateStr = format(selectedCalendarDate, "yyyy-MM-dd");
-        onTimeSelect(dateStr, time);
+        const slot = availableSlots.find((s) => s.time === time);
+        if (slot?.employeeId && slot.employeeName) {
+          onTimeSelect(dateStr, time, {
+            employeeId: slot.employeeId,
+            employeeName: slot.employeeName,
+          });
+        } else {
+          onTimeSelect(dateStr, time);
+        }
       }
     } catch (error) {
       console.error("Error selecting time:", error);
@@ -951,12 +1003,16 @@ export function AppointmentCalendar({
               <div className="text-center py-8">
                 <p className="text-gray-400">{text.pickDate}</p>
               </div>
-            ) : isLoadingAvailability && hasEmployeeSelected ? (
+            ) : (isLoadingAvailability && hasEmployeeSelected) ||
+              (isLoadingNoPreference && !hasEmployeeSelected) ? (
               <div className="text-center py-8">
                 <p className="text-gray-400">{text.loadingAvailability}</p>
               </div>
             ) : (
               <>
+              {!hasEmployeeSelected && (
+                <p className="text-xs text-whiskey/80 mb-3">{text.noPreferenceSlotHint}</p>
+              )}
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 sm:gap-3">
                   {availableSlots.map((slot) => {
                     const isSelected = selectedTime === slot.time && selectedDate === format(selectedCalendarDate!, "yyyy-MM-dd");
@@ -980,7 +1036,14 @@ export function AppointmentCalendar({
                               : "bg-red-600 hover:bg-red-600 border-red-600 text-black cursor-not-allowed opacity-100"
                         }`}
                       >
-                        {slot.time}
+                        <span className="flex flex-col leading-tight">
+                          <span>{slot.time}</span>
+                          {!hasEmployeeSelected && slot.available && slot.employeeName && (
+                            <span className="text-[10px] font-normal opacity-80 truncate max-w-full">
+                              {slot.employeeName}
+                            </span>
+                          )}
+                        </span>
                       </Button>
                     );
                   })}

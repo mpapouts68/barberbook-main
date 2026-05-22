@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useLanguage } from "@/context/language-context";
 import { brandFullName, brandLogo, brandLogoAlt } from "@/lib/branding";
+import { GUEST_BOOKING_LANGUAGE_KEY } from "@/context/language-context";
+import SocialContactBadges from "@/components/SocialContactBadges";
 
 export default function Login() {
   const [, setLocation] = useLocation();
@@ -40,6 +42,10 @@ export default function Login() {
     terms: isEnglish
       ? `By signing in, you agree to the ${brandFullName} service terms`
       : `Συνδεόμενοι, συμφωνείτε με τους όρους υπηρεσίας του ${brandFullName}`,
+    guestBook: isEnglish ? "Book without signing in" : "Κλείσε ραντεβού χωρίς εγγραφή",
+    guestBookHint: isEnglish
+      ? "Name and phone only — email optional"
+      : "Όνομα και τηλέφωνο — το email είναι προαιρετικό",
   };
 
   // Check if OAuth is configured (public endpoint, no auth needed)
@@ -130,7 +136,24 @@ export default function Login() {
               {text.title}
             </h2>
             <p className="text-gray-400">{text.subtitle}</p>
+            <SocialContactBadges className="mt-5" />
           </div>
+
+          <Link
+            href="/booking"
+            onClick={() => {
+              sessionStorage.setItem(GUEST_BOOKING_LANGUAGE_KEY, "en");
+            }}
+          >
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full mb-6 border-whiskey/60 text-whiskey hover:bg-whiskey/10 hover:text-whiskey font-semibold"
+            >
+              {text.guestBook}
+            </Button>
+          </Link>
+          <p className="text-center text-xs text-gray-500 -mt-4 mb-4">{text.guestBookHint}</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email Field */}

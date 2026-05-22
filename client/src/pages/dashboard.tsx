@@ -14,6 +14,7 @@ import eortologioImg from "@assets/EORTOLOGIO.png";
 import settingsImg from "@assets/SETTINGS.png";
 import prosfataImg from "@assets/PROSFATA.png";
 import { useLanguage } from "@/context/language-context";
+import { resolveServiceName } from "@/lib/serviceLabels";
 import { brandLogo, brandLogoAlt, brandName } from "@/lib/branding";
 
 export default function Dashboard() {
@@ -83,15 +84,8 @@ export default function Dashboard() {
     return appointment.barber;
   };
 
-  const getServiceName = (appointment: Appointment) => {
-    // If service field contains a UUID (service ID), look up the service name
-    if (appointment.service && appointment.service.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-      const service = services.find((svc: any) => svc.id === appointment.service);
-      return service?.name || appointment.service;
-    }
-    // If service field contains a name, use it directly
-    return appointment.service;
-  };
+  const getServiceName = (appointment: Appointment) =>
+    resolveServiceName(appointment.service, services, isEnglish);
 
   const upcomingAppointments = (myAppointments as any[]).filter(
     (apt: any) => apt.status === "confirmed" && new Date(apt.date) >= new Date()

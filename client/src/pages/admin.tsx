@@ -470,6 +470,8 @@ function ServicesManagement() {
   const [serviceForm, setServiceForm] = useState({
     name: "",
     description: "",
+    nameEn: "",
+    descriptionEn: "",
     price: 0,
     duration: 30,
     displayOrder: 0,
@@ -500,7 +502,7 @@ function ServicesManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/services"] });
       toast({ title: "Η υπηρεσία δημιουργήθηκε επιτυχώς" });
       setIsServiceDialogOpen(false);
-      setServiceForm({ name: "", description: "", price: 0, duration: 30, displayOrder: 0, isActive: true });
+      setServiceForm({ name: "", description: "", nameEn: "", descriptionEn: "", price: 0, duration: 30, displayOrder: 0, isActive: true });
     },
   });
 
@@ -521,7 +523,7 @@ function ServicesManagement() {
       toast({ title: "Η υπηρεσία ενημερώθηκε επιτυχώς" });
       setIsServiceDialogOpen(false);
       setEditingService(null);
-      setServiceForm({ name: "", description: "", price: 0, duration: 30, displayOrder: 0, isActive: true });
+      setServiceForm({ name: "", description: "", nameEn: "", descriptionEn: "", price: 0, duration: 30, displayOrder: 0, isActive: true });
     },
   });
 
@@ -554,6 +556,8 @@ function ServicesManagement() {
     setServiceForm({
       name: service.name,
       description: service.description || "",
+      nameEn: service.nameEn || "",
+      descriptionEn: service.descriptionEn || "",
       price: service.price,
       duration: service.duration,
       displayOrder: service.displayOrder,
@@ -564,7 +568,7 @@ function ServicesManagement() {
 
   const openCreateService = () => {
     setEditingService(null);
-    setServiceForm({ name: "", description: "", price: 0, duration: 30, displayOrder: 0, isActive: true });
+    setServiceForm({ name: "", description: "", nameEn: "", descriptionEn: "", price: 0, duration: 30, displayOrder: 0, isActive: true });
     setIsServiceDialogOpen(true);
   };
 
@@ -587,7 +591,13 @@ function ServicesManagement() {
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-lg font-semibold text-whiskey">{service.name}</h3>
+                  {service.nameEn && (
+                    <p className="text-gray-500 text-xs">{service.nameEn}</p>
+                  )}
                   <p className="text-gray-400 text-sm">{service.description}</p>
+                  {service.descriptionEn && (
+                    <p className="text-gray-500 text-xs">{service.descriptionEn}</p>
+                  )}
                 </div>
                 <Badge variant={service.isActive ? "default" : "secondary"}>
                   {service.isActive ? "Ενεργό" : "Ανενεργό"}
@@ -646,25 +656,51 @@ function ServicesManagement() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="name" className="text-white">Service Name</Label>
-              <Input
-                id="name"
-                value={serviceForm.name}
-                onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
-                className="bg-steel border-steel text-white"
-                required
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="name" className="text-white">Όνομα (Ελληνικά) *</Label>
+                <Input
+                  id="name"
+                  value={serviceForm.name}
+                  onChange={(e) => setServiceForm({ ...serviceForm, name: e.target.value })}
+                  className="bg-steel border-steel text-white"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="nameEn" className="text-white">Name (English)</Label>
+                <Input
+                  id="nameEn"
+                  value={serviceForm.nameEn}
+                  onChange={(e) => setServiceForm({ ...serviceForm, nameEn: e.target.value })}
+                  className="bg-steel border-steel text-white"
+                  placeholder="Haircut"
+                />
+              </div>
             </div>
             
-            <div>
-              <Label htmlFor="description" className="text-white">Description</Label>
-              <Textarea
-                id="description"
-                value={serviceForm.description}
-                onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
-                className="bg-steel border-steel text-white"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="description" className="text-white">Περιγραφή (Ελληνικά)</Label>
+                <Textarea
+                  id="description"
+                  value={serviceForm.description}
+                  onChange={(e) => setServiceForm({ ...serviceForm, description: e.target.value })}
+                  className="bg-steel border-steel text-white"
+                  rows={3}
+                />
+              </div>
+              <div>
+                <Label htmlFor="descriptionEn" className="text-white">Description (English)</Label>
+                <Textarea
+                  id="descriptionEn"
+                  value={serviceForm.descriptionEn}
+                  onChange={(e) => setServiceForm({ ...serviceForm, descriptionEn: e.target.value })}
+                  className="bg-steel border-steel text-white"
+                  rows={3}
+                  placeholder="Classic haircut with clippers"
+                />
+              </div>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -2530,7 +2566,7 @@ function ManualAppointmentBooking() {
             <SelectContent>
               {services.map((service: any) => (
                 <SelectItem key={service.id} value={service.id}>
-                  {service.name} - €{service.price} ({service.duration} min)
+                  {service.name}{service.nameEn ? ` / ${service.nameEn}` : ""} - €{service.price} ({service.duration} min)
                 </SelectItem>
               ))}
             </SelectContent>

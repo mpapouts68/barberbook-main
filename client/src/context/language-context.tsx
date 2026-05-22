@@ -14,6 +14,7 @@ interface LanguageContextValue {
 }
 
 const LANGUAGE_STORAGE_KEY = "barberbook-language";
+export const GUEST_BOOKING_LANGUAGE_KEY = "barberbook-guest-language";
 
 const LanguageContext = createContext<LanguageContextValue | undefined>(undefined);
 
@@ -23,12 +24,24 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       return "el";
     }
 
+    if (window.location.pathname === "/booking") {
+      const guestLang = window.sessionStorage.getItem(GUEST_BOOKING_LANGUAGE_KEY);
+      if (guestLang === "en" || guestLang === "el") {
+        return guestLang;
+      }
+      return "en";
+    }
+
     const storedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
     return storedLanguage === "en" ? "en" : "el";
   });
 
   useEffect(() => {
-    window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    if (window.location.pathname === "/booking") {
+      window.sessionStorage.setItem(GUEST_BOOKING_LANGUAGE_KEY, language);
+    } else {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+    }
     document.documentElement.lang = language;
   }, [language]);
 

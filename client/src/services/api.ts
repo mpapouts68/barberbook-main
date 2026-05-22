@@ -18,6 +18,32 @@ export const api = {
     return response.json();
   },
 
+  async createGuestAppointment(data: {
+    clientFirstName: string;
+    clientLastName?: string;
+    clientEmail?: string;
+    clientPhone?: string;
+    employeeId?: string;
+    service: string;
+    barber?: string;
+    date: string;
+    time: string;
+    notes?: string;
+    duration?: number;
+  }) {
+    const response = await fetch("/api/appointments/guest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || "Failed to book appointment");
+    }
+    return body;
+  },
+
   async getMyAppointments(): Promise<Appointment[]> {
     const response = await apiRequest("/api/appointments", "GET");
     return response.json();

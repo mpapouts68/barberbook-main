@@ -31,6 +31,18 @@ import {
   buildGoogleCalendarEventData,
   userToCalendarClient,
 } from "./calendarEventHelpers";
+import { createGuestAppointment } from "./services/guestBooking";
+import {
+  addMinutesToTime,
+  getWorkingHoursRanges,
+  intersectRangeSets,
+  timeSlotsOverlap,
+} from "./schedulingUtils";
+import {
+  findFirstAvailableEmployee,
+  getEmployeeAvailabilitySlots,
+  getNoPreferenceAvailability,
+} from "./services/employeeAvailability";
 // Recurring appointments service - will be loaded dynamically if available
 async function getRecurringAppointmentsService() {
   try {
@@ -39,35 +51,6 @@ async function getRecurringAppointmentsService() {
   } catch (error) {
     return null;
   }
-}
-
-// Helper function to add minutes to a time string (HH:MM format)
-function addMinutesToTime(timeStr: string, minutes: number): string {
-  const [hours, mins] = timeStr.split(':').map(Number);
-  const date = new Date();
-  date.setHours(hours, mins, 0, 0);
-  date.setMinutes(date.getMinutes() + minutes);
-  
-  return date.toTimeString().slice(0, 5);
-}
-
-// Helper function to check if two time slots overlap
-function timeSlotsOverlap(
-  slot1Start: string, slot1End: string, 
-  slot2Start: string, slot2End: string
-): boolean {
-  const start1 = timeToMinutes(slot1Start);
-  const end1 = timeToMinutes(slot1End);
-  const start2 = timeToMinutes(slot2Start);
-  const end2 = timeToMinutes(slot2End);
-  
-  return start1 < end2 && start2 < end1;
-}
-
-// Helper function to convert HH:MM to minutes from midnight
-function timeToMinutes(timeStr: string): number {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  return hours * 60 + minutes;
 }
 
 // Helper to normalize working hours to array format (supports backward compatibility)
@@ -93,108 +76,6 @@ function isTimeWithinWorkingHours(timeStart: string, timeEnd: string, workingHou
   return ranges.some(range => {
     return timeStart >= range.start && timeEnd <= range.end;
   });
-}
-
-// Helper to get all time ranges for a day
-function getWorkingHoursRanges(workingHours: any, dayOfWeek: string): Array<{ start: string; end: string }> | null {
-  // Handle both full day names (monday, tuesday, etc.) and abbreviated (mon, tue, etc.)
-  let dayName = dayOfWeek.toLowerCase();
-
-  // If it's already a full day name, use it directly
-  const fullDayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  if (fullDayNames.includes(dayName)) {
-    const dayConfig = workingHours[dayName];
-    return normalizeWorkingHours(dayConfig);
-  }
-
-  // Otherwise, convert abbreviated to full name (for backward compatibility)
-  const dayMap: Record<string, string> = {
-    'sun': 'sunday',
-    'mon': 'monday',
-    'tue': 'tuesday',
-    'wed': 'wednesday',
-    'thu': 'thursday',
-    'fri': 'friday',
-    'sat': 'saturday'
-  };
-
-  dayName = dayMap[dayName] || dayName;
-  const dayConfig = workingHours[dayName];
-  return normalizeWorkingHours(dayConfig);
-}
-
-// Helper function to intersect two time ranges
-function intersectRanges(range1: { start: string; end: string }, range2: { start: string; end: string }): { start: string; end: string } | null {
-  const [start1Hour, start1Min] = range1.start.split(':').map(Number);
-  const [end1Hour, end1Min] = range1.end.split(':').map(Number);
-  const [start2Hour, start2Min] = range2.start.split(':').map(Number);
-  const [end2Hour, end2Min] = range2.end.split(':').map(Number);
-  
-  const start1 = start1Hour * 60 + start1Min;
-  const end1 = end1Hour * 60 + end1Min;
-  const start2 = start2Hour * 60 + start2Min;
-  const end2 = end2Hour * 60 + end2Min;
-  
-  const intersectStart = Math.max(start1, start2);
-  const intersectEnd = Math.min(end1, end2);
-  
-  if (intersectStart >= intersectEnd) {
-    return null; // No intersection
-  }
-  
-  const startHour = Math.floor(intersectStart / 60);
-  const startMin = intersectStart % 60;
-  const endHour = Math.floor(intersectEnd / 60);
-  const endMin = intersectEnd % 60;
-  
-  return {
-    start: `${String(startHour).padStart(2, '0')}:${String(startMin).padStart(2, '0')}`,
-    end: `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`
-  };
-}
-
-// Helper function to intersect all ranges from two sets
-function intersectRangeSets(ranges1: Array<{ start: string; end: string }>, ranges2: Array<{ start: string; end: string }>): Array<{ start: string; end: string }> {
-  const intersections: Array<{ start: string; end: string }> = [];
-  
-  for (const range1 of ranges1) {
-    for (const range2 of ranges2) {
-      const intersection = intersectRanges(range1, range2);
-      if (intersection) {
-        intersections.push(intersection);
-      }
-    }
-  }
-  
-  // Sort and merge overlapping ranges
-  intersections.sort((a, b) => a.start.localeCompare(b.start));
-  
-  if (intersections.length === 0) return [];
-  
-  const merged: Array<{ start: string; end: string }> = [intersections[0]];
-  for (let i = 1; i < intersections.length; i++) {
-    const current = intersections[i];
-    const last = merged[merged.length - 1];
-    
-    const [currentStartHour, currentStartMin] = current.start.split(':').map(Number);
-    const [lastEndHour, lastEndMin] = last.end.split(':').map(Number);
-    const currentStart = currentStartHour * 60 + currentStartMin;
-    const lastEnd = lastEndHour * 60 + lastEndMin;
-    
-    if (currentStart <= lastEnd) {
-      // Merge overlapping ranges
-      const [currentEndHour, currentEndMin] = current.end.split(':').map(Number);
-      const currentEnd = currentEndHour * 60 + currentEndMin;
-      const newEnd = Math.max(lastEnd, currentEnd);
-      const newEndHour = Math.floor(newEnd / 60);
-      const newEndMin = newEnd % 60;
-      last.end = `${String(newEndHour).padStart(2, '0')}:${String(newEndMin).padStart(2, '0')}`;
-    } else {
-      merged.push(current);
-    }
-  }
-  
-  return merged;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -670,6 +551,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Public guest booking (walk-in style, no account required)
+  app.post("/api/appointments/guest", async (req, res) => {
+    try {
+      const {
+        clientFirstName,
+        clientLastName,
+        clientEmail,
+        clientPhone,
+        employeeId,
+        service,
+        barber,
+        date,
+        time,
+        notes,
+        duration,
+      } = req.body;
+
+      if (!clientFirstName?.trim() || !service || !date || !time) {
+        return res.status(400).json({
+          message:
+            "Απαιτούνται όνομα, υπηρεσία, ημερομηνία και ώρα / First name, service, date and time are required",
+        });
+      }
+
+      const { appointment } = await createGuestAppointment({
+        clientFirstName,
+        clientLastName,
+        clientEmail,
+        clientPhone,
+        employeeId: employeeId || "",
+        service,
+        barber,
+        date,
+        time,
+        notes,
+        duration,
+      });
+
+      res.status(201).json({
+        success: true,
+        appointment,
+        message: "Appointment booked successfully",
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to book appointment";
+      const status =
+        message.includes("διαθέσιμος") ||
+        message.includes("available") ||
+        message.includes("conflict") ||
+        message.includes("closed")
+          ? 409
+          : message.includes("Missing") || message.includes("required")
+            ? 400
+            : 500;
+      console.error("Guest booking error:", error);
+      res.status(status).json({ message });
+    }
+  });
+
   // Appointment Routes
   app.post("/api/appointments", requireAuth, async (req, res) => {
     try {
@@ -681,92 +622,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const requestedStart = appointmentData.time;
       const requestedEnd = addMinutesToTime(appointmentData.time, appointmentData.duration || 30);
       
-      // If no specific employee is selected, find the first available employee
+      // No preference: assign first barber free at this time
       if (!appointmentData.employeeId || appointmentData.employeeId === "" || appointmentData.employeeId === "550e8400-e29b-41d4-a716-446655440003") {
-        const allEmployees = await storage.getAllEmployees();
-        // Filter to only active employees
-        const activeEmployees = allEmployees.filter(emp => emp.isActive);
-        let assignedEmployee = null;
-        
-        // Check shop working hours first (employees can't work when shop is closed)
-        const shopWorkingHours = await storage.getWorkingHours();
-        const dayOfWeek = new Date(appointmentData.date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-        const shopRanges = getWorkingHoursRanges(shopWorkingHours, dayOfWeek);
-        
-        if (!shopRanges || shopRanges.length === 0) {
-          return res.status(400).json({ message: "Shop is closed on this day" });
-        }
-        
-        // Check if requested time is within shop working hours
-        const isWithinShopHours = shopRanges.some(range => {
-          return requestedStart >= range.start && requestedEnd <= range.end;
-        });
-        
-        if (!isWithinShopHours) {
-          return res.status(400).json({ message: "Requested time is outside shop working hours" });
-        }
-        
-        // Try to find an available employee
-        for (const employee of activeEmployees) {
-          
-          // Use the first matching range for Google Calendar check
-          const matchingRange = shopRanges.find(range => requestedStart >= range.start && requestedEnd <= range.end) || shopRanges[0];
-          const workStart = matchingRange.start;
-          const workEnd = matchingRange.end;
-          
-          // Check for conflicts with existing appointments
-          const existingAppointments = await storage.getAppointmentsByEmployeeAndDate(
-            employee.id, 
-            appointmentData.date
-          );
-          
-          const hasConflict = existingAppointments.some(apt => {
-            if (apt.status === 'cancelled') return false;
-            const aptEnd = addMinutesToTime(apt.time, apt.duration || 30);
-            return timeSlotsOverlap(requestedStart, requestedEnd, apt.time, aptEnd);
-          });
-          
-          // Also check Google Calendar if enabled
-          if (!hasConflict && employee.googleCalendarEnabled && employee.googleCalendarId) {
-            try {
-              const timeMin = `${appointmentData.date}T${workStart}:00.000Z`;
-              const timeMax = `${appointmentData.date}T${workEnd}:00.000Z`;
-              const calendarEvents = await getCalendarEvents(employee.googleCalendarId, timeMin, timeMax);
-              
-              const hasCalendarConflict = calendarEvents.some(event => {
-                if (!event.start?.dateTime || !event.end?.dateTime) return false;
-                const eventStart = new Date(event.start.dateTime);
-                const eventEnd = new Date(event.end.dateTime);
-                const eventStartTime = eventStart.toTimeString().slice(0, 5);
-                const eventEndTime = eventEnd.toTimeString().slice(0, 5);
-                return timeSlotsOverlap(requestedStart, requestedEnd, eventStartTime, eventEndTime);
-              });
-              
-              if (hasCalendarConflict) {
-                continue; // This employee has a calendar conflict
-              }
-            } catch (calendarError) {
-              console.warn(`Failed to check Google Calendar for employee ${employee.id}:`, calendarError);
-              // Continue anyway - assume available if calendar check fails
-            }
-          }
-          
-          if (!hasConflict) {
-            assignedEmployee = employee;
-            break; // Found an available employee
-          }
-        }
-        
-        if (!assignedEmployee) {
-          return res.status(409).json({ 
-            message: "Δεν υπάρχει διαθέσιμος υπάλληλος για αυτή την ώρα. Παρακαλώ επιλέξτε άλλη ώρα." 
+        const assigned = await findFirstAvailableEmployee(
+          appointmentData.date,
+          appointmentData.time,
+          appointmentData.duration || 30,
+        );
+        if (!assigned) {
+          return res.status(409).json({
+            message:
+              "Δεν υπάρχει διαθέσιμος κομμωτής για αυτή την ώρα. Παρακαλώ επιλέξτε άλλη ώρα.",
           });
         }
-        
-        // Assign the found employee
-        appointmentData.employeeId = assignedEmployee.id;
-        appointmentData.barber = assignedEmployee.name;
-        console.log(`✅ Assigned appointment to first available employee: ${assignedEmployee.name}`);
+        appointmentData.employeeId = assigned.id;
+        appointmentData.barber = assigned.name;
+        console.log(`✅ Assigned appointment to first available employee: ${assigned.name}`);
       }
       
       // Get employee for calendar sync and recurring appointments
@@ -1573,11 +1444,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Calendar availability routes
+  app.get("/api/availability/no-preference", async (req, res) => {
+    try {
+      const { date, duration = 30 } = req.query;
+      if (!date || typeof date !== "string") {
+        return res.status(400).json({ message: "Date parameter is required" });
+      }
+      const slots = await getNoPreferenceAvailability(date, Number(duration));
+      res.json(slots);
+    } catch (error) {
+      console.error("Error fetching no-preference availability:", error);
+      res.status(500).json({ message: "Failed to fetch availability" });
+    }
+  });
+
   app.get("/api/employees/:id/availability", async (req, res) => {
     try {
       const { date, duration = 30 } = req.query;
-      
-      if (!date || typeof date !== 'string') {
+
+      if (!date || typeof date !== "string") {
         return res.status(400).json({ message: "Date parameter is required" });
       }
 
@@ -1586,155 +1471,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Employee not found" });
       }
 
-      // CRITICAL: Always check shop hours first, then intersect with employee hours
-      // Employee can only work when shop is also open
-      const dayOfWeek = new Date(date).toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
-      
-      // Get shop working hours first - shop must be open
-      const shopWorkingHours = await storage.getWorkingHours();
-      const shopRanges = getWorkingHoursRanges(shopWorkingHours, dayOfWeek);
-      
-      if (!shopRanges || shopRanges.length === 0) {
-        // Shop is closed - no availability
-        return res.json([]);
-      }
-      
-      // Get employee working hours if set
-      let empRanges: Array<{ start: string; end: string }> | null = null;
-      if (employee.workingHours) {
-        try {
-          const empHours = typeof employee.workingHours === 'string' ? JSON.parse(employee.workingHours) : employee.workingHours;
-          empRanges = getWorkingHoursRanges(empHours, dayOfWeek);
-        } catch (_) {
-          // Parse error, will use shop hours only
-        }
-      }
-      
-      // Intersect employee hours with shop hours
-      let ranges: Array<{ start: string; end: string }>;
-      if (empRanges && empRanges.length > 0) {
-        // Employee has hours - intersect with shop hours
-        ranges = intersectRangeSets(shopRanges, empRanges);
-        if (ranges.length === 0) {
-          // No intersection - employee cannot work when shop is closed
-          return res.json([]);
-        }
-      } else {
-        // No employee hours - use shop hours only
-        ranges = shopRanges;
-      }
-
-      // CRITICAL: Check Google Calendar FIRST if employee has it enabled
-      // This ensures appointments added directly to Google Calendar are respected
-      let googleCalendarEvents: any[] = [];
-      if (employee.googleCalendarEnabled && employee.googleCalendarId) {
-        try {
-          // Get the earliest start and latest end across all ranges for Google Calendar query
-          const allStarts = ranges.map(r => r.start).sort();
-          const allEnds = ranges.map(r => r.end).sort();
-          
-          // Create proper ISO 8601 datetime strings with local timezone
-          // Working hours are in local time (HH:MM format), so we need to construct
-          // the datetime string properly. Use the server's local timezone offset.
-          // getTimezoneOffset() returns negative for timezones ahead of UTC (e.g., UTC+2 = -120)
-          // ISO 8601 uses opposite sign convention (UTC+2 = +02:00)
-          const timezoneOffsetMinutes = new Date().getTimezoneOffset();
-          const offsetHours = Math.floor(Math.abs(timezoneOffsetMinutes) / 60);
-          const offsetMinutes = Math.abs(timezoneOffsetMinutes) % 60;
-          const offsetSign = timezoneOffsetMinutes <= 0 ? '+' : '-'; // Invert sign for ISO format
-          const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMinutes).padStart(2, '0')}`;
-          
-          const timeMin = `${date}T${allStarts[0]}:00${offsetStr}`;
-          const timeMax = `${date}T${allEnds[allEnds.length - 1]}:00${offsetStr}`;
-          
-          googleCalendarEvents = await getCalendarEvents(employee.googleCalendarId, timeMin, timeMax);
-          console.log(`📅 Found ${googleCalendarEvents.length} events in Google Calendar for ${employee.name} on ${date} (ranges: ${ranges.length})`);
-        } catch (calendarError: any) {
-          console.warn(`⚠️  Failed to fetch Google Calendar events for ${employee.name}:`, calendarError.message);
-          // Continue with database-only check if Google Calendar fails
-        }
-      }
-
-      // Get existing appointments from database for this employee and date
-      const existingAppointments = await storage.getAppointmentsByEmployeeAndDate(req.params.id, date);
-      const bookedSlots = existingAppointments
-        .filter(apt => apt.status !== 'cancelled')
-        .map(apt => ({
-          start: apt.time,
-          end: addMinutesToTime(apt.time, apt.duration || 30),
-          duration: apt.duration || 30
-        }));
-
-      // Convert Google Calendar events to booked slots
-      for (const event of googleCalendarEvents) {
-        if (event.start?.dateTime && event.end?.dateTime) {
-          const eventStart = new Date(event.start.dateTime);
-          const eventEnd = new Date(event.end.dateTime);
-          const eventStartTime = eventStart.toTimeString().slice(0, 5);
-          const eventEndTime = eventEnd.toTimeString().slice(0, 5);
-          
-          bookedSlots.push({
-            start: eventStartTime,
-            end: eventEndTime,
-            duration: Math.round((eventEnd.getTime() - eventStart.getTime()) / 60000)
-          });
-        }
-      }
-
-      // Generate all possible time slots across ALL ranges
-      // CRITICAL: Process every range, not just the first one
-      const slots = [];
-      
-      console.log(`🔧 API: Generating slots from ${ranges.length} range(s) for ${employee.name} on ${date}:`, ranges.map(r => `${r.start}-${r.end}`));
-      
-      for (const range of ranges) {
-        if (!range.start || !range.end) {
-          console.warn(`⚠️ Skipping invalid range:`, range);
-          continue;
-        }
-        
-        const startTime = new Date(`${date}T${range.start}:00`);
-        const endTime = new Date(`${date}T${range.end}:00`);
-        
-        if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
-          console.warn(`⚠️ Skipping range with invalid times: ${range.start}-${range.end}`);
-          continue;
-        }
-        
-        let currentTime = new Date(startTime);
-        let rangeSlotCount = 0;
-        
-        while (currentTime < endTime) {
-          const slotEnd = new Date(currentTime.getTime() + Number(duration) * 60000);
-          if (slotEnd <= endTime) {
-            const slotStartTime = currentTime.toTimeString().slice(0, 5);
-            const slotEndTime = slotEnd.toTimeString().slice(0, 5);
-            
-            // Check if this slot conflicts with any booked appointments (from database OR Google Calendar)
-            const isAvailable = !bookedSlots.some(bookedSlot => 
-              timeSlotsOverlap(slotStartTime, slotEndTime, bookedSlot.start, bookedSlot.end)
-            );
-            
-            slots.push({
-              start: slotStartTime,
-              end: slotEndTime,
-              available: isAvailable
-            });
-            
-            rangeSlotCount++;
-            currentTime = new Date(currentTime.getTime() + Number(duration) * 60000);
-          } else {
-            break;
-          }
-        }
-        
-        console.log(`  ✅ Range ${range.start}-${range.end}: Generated ${rangeSlotCount} slots`);
-      }
-      
-      // Sort slots by start time
-      slots.sort((a, b) => a.start.localeCompare(b.start));
-      console.log(`📅 API: Total slots generated: ${slots.length} from ${ranges.length} range(s)`);
-
+      const slots = await getEmployeeAvailabilitySlots(
+        req.params.id,
+        date,
+        Number(duration),
+      );
       res.json(slots);
     } catch (error) {
       console.error("Error fetching availability:", error);

@@ -14,13 +14,23 @@ import { Calendar } from "lucide-react";
 import { AppointmentCalendar } from "@/components/AppointmentCalendar";
 import type { InsertAppointment, Employee } from "@shared/schema";
 import { useLanguage } from "@/context/language-context";
+import LanguageSwitcher from "@/components/language-switcher";
+import { getServiceDescription, getServiceLabel, getServiceName } from "@/lib/serviceLabels";
 
 export default function Booking() {
   const { user } = useAuth();
+  const isGuest = !user;
   const { toast } = useToast();
   const { isEnglish } = useLanguage();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
+
+  const [guest, setGuest] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+  });
 
   const [booking, setBooking] = useState({
     service: "",
@@ -43,7 +53,20 @@ export default function Booking() {
     successDescription: isEnglish ? "Your appointment was booked successfully." : "Το ραντεβού σας κλείστηκε επιτυχώς.",
     errorTitle: isEnglish ? "Error" : "Σφάλμα",
     bookingError: isEnglish ? "Failed to book appointment. Please try again." : "Αποτυχία κλεισίματος ραντεβού. Παρακαλώ προσπαθήστε ξανά.",
-    mustBeLoggedIn: isEnglish ? "You must be signed in to book an appointment." : "Πρέπει να είστε συνδεδεμένοι για να κλείσετε ραντεβού.",
+    guestTitle: isEnglish ? "BOOK AS GUEST" : "ΚΛΕΙΣΕ ΩΣ ΕΠΙΣΚΕΠΤΗΣ",
+    guestSubtitle: isEnglish
+      ? "No account needed — email is optional"
+      : "Χωρίς λογαριασμό — το email είναι προαιρετικό",
+    firstName: isEnglish ? "FIRST NAME" : "ΟΝΟΜΑ",
+    lastName: isEnglish ? "LAST NAME (optional)" : "ΕΠΩΝΥΜΟ (προαιρετικό)",
+    emailOptional: isEnglish ? "EMAIL (optional)" : "EMAIL (προαιρετικό)",
+    phoneOptional: isEnglish ? "PHONE (optional)" : "ΤΗΛΕΦΩΝΟ (προαιρετικό)",
+    guestNameRequired: isEnglish ? "Please enter your first name." : "Παρακαλώ συμπληρώστε το όνομά σας.",
+    guestSuccess: isEnglish
+      ? "Your appointment is confirmed. See you soon!"
+      : "Το ραντεβού σου επιβεβαιώθηκε. Σε περιμένουμε!",
+    backHome: isEnglish ? "Back to home" : "Επιστροφή στην αρχική",
+    signIn: isEnglish ? "Sign in" : "Σύνδεση",
     requiredFields: isEnglish ? "Please fill in all required fields." : "Παρακαλώ συμπληρώστε όλα τα απαιτούμενα πεδία.",
     employeeNotFound: isEnglish ? "The selected barber could not be found." : "Ο επιλεγμένος υπάλληλος δεν βρέθηκε.",
     noPreference: isEnglish ? "No preference" : "Χωρίς προτίμηση",
@@ -76,6 +99,10 @@ export default function Booking() {
     dateSelectionHint: isEnglish
       ? "Please choose a service to view the availability calendar"
       : "Παρακαλώ επιλέξτε υπηρεσία για να δείτε το ημερολόγιο διαθεσιμότητας",
+    noPreferenceHint: isEnglish
+      ? "No preference: pick a time — we assign the first available barber for that slot."
+      : "Χωρίς προτίμηση: επιλέξτε ώρα — ανατίθεται ο πρώτος διαθέσιμος κομμωτής.",
+    assignedBarber: isEnglish ? "Barber" : "Κομμωτής",
   };
 
   // Fetch employees
@@ -89,29 +116,49 @@ export default function Booking() {
   });
 
   const createAppointmentMutation = useMutation({
-    mutationFn: (appointment: InsertAppointment) => api.createAppointment(appointment),
-    onSuccess: (data, variables) => {
+    mutationFn: async (payload: InsertAppointment | Record<string, unknown>) => {
+      if (isGuest) {
+        return api.createGuestAppointment(payload as Parameters<typeof api.createGuestAppointment>[0]);
+      }
+      return api.createAppointment(payload as InsertAppointment);
+    },
+    onSuccess: (data: { appointment?: { barber?: string } }, variables) => {
+      const barberName = data?.appointment?.barber;
+      const withBarber =
+        barberName && barberName !== text.noPreference
+          ? ` (${text.assignedBarber}: ${barberName})`
+          : "";
       toast({
         title: text.successTitle,
-        description: text.successDescription,
+        description: isGuest
+          ? `${text.guestSuccess}${withBarber}`
+          : `${text.successDescription}${withBarber}`,
       });
-      // Invalidate all appointment-related queries
       queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/appointments/date"] });
-      if (variables.date) {
-        queryClient.invalidateQueries({ queryKey: ["/api/appointments/date", variables.date] });
+      const dateKey =
+        "date" in variables && variables.date
+          ? variables.date
+          : undefined;
+      if (dateKey) {
+        queryClient.invalidateQueries({ queryKey: ["/api/appointments/date", dateKey] });
       }
-      // Invalidate employee availability queries
-      if (variables.employeeId) {
-        queryClient.invalidateQueries({ queryKey: ["/api/employees", variables.employeeId, "availability"] });
+      const employeeKey =
+        "employeeId" in variables && variables.employeeId
+          ? variables.employeeId
+          : undefined;
+      if (employeeKey) {
+        queryClient.invalidateQueries({
+          queryKey: ["/api/employees", employeeKey, "availability"],
+        });
       }
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
-      setLocation("/dashboard");
+      setLocation(isGuest ? "/" : "/dashboard");
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: text.errorTitle,
-        description: text.bookingError,
+        description: error.message || text.bookingError,
         variant: "destructive",
       });
     },
@@ -119,11 +166,11 @@ export default function Booking() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!user) {
+
+    if (isGuest && !guest.firstName.trim()) {
       toast({
         title: text.errorTitle,
-        description: text.mustBeLoggedIn,
+        description: text.guestNameRequired,
         variant: "destructive",
       });
       return;
@@ -138,11 +185,9 @@ export default function Booking() {
       return;
     }
 
-    // If no employee selected, backend will auto-assign first available
-    // So we allow empty employeeId to proceed
-    let barberName = text.noPreference;
+    let barberName = booking.barber || text.noPreference;
     if (booking.employeeId) {
-      const selectedEmployee = employees.find(emp => emp.id === booking.employeeId);
+      const selectedEmployee = employees.find((emp) => emp.id === booking.employeeId);
       if (!selectedEmployee) {
         toast({
           title: text.errorTitle,
@@ -154,9 +199,32 @@ export default function Booking() {
       barberName = selectedEmployee.name;
     }
     
-    const appointmentData: any = {
-      userId: user.id,
-      employeeId: booking.employeeId || "", // Empty string allows backend to auto-assign
+    if (isGuest) {
+      const selectedService = services.find((s) => s.value === booking.service);
+      createAppointmentMutation.mutate({
+        clientFirstName: guest.firstName.trim(),
+        clientLastName: guest.lastName.trim(),
+        clientEmail: guest.email.trim() || undefined,
+        clientPhone: guest.phone.trim(),
+        employeeId: booking.employeeId || "",
+        service: booking.service,
+        barber: barberName,
+        date: booking.date,
+        time: booking.time,
+        notes: booking.notes,
+        duration: selectedService?.duration,
+      });
+      return;
+    }
+
+    const appointmentData: InsertAppointment & {
+      isRecurring?: boolean;
+      recurringPattern?: string;
+      recurringInterval?: number;
+      recurringEndDate?: string;
+    } = {
+      userId: user!.id,
+      employeeId: booking.employeeId || "",
       service: booking.service,
       barber: barberName,
       date: booking.date,
@@ -179,18 +247,21 @@ export default function Booking() {
   // Fetch services from API
   const { data: servicesData = [] } = useQuery<any[]>({
     queryKey: ["/api/services"],
-    enabled: !!user,
   });
 
   const services = servicesData
     .filter((service) => service.isActive)
     .map((service) => ({
       value: service.id,
-      label: service.description ? `${service.name} - ${service.description}` : service.name,
-      name: service.name,
-      description: service.description,
+      label: getServiceLabel(service, isEnglish, { includeDescription: true }),
+      name: getServiceName(service, isEnglish),
+      description: getServiceDescription(service, isEnglish),
       duration: service.duration,
+      raw: service,
     }));
+
+  const selectedServiceDuration =
+    services.find((s) => s.value === booking.service)?.duration || 30;
 
   // Show calendar when service is selected (employee is optional with "no preference")
   useEffect(() => {
@@ -223,17 +294,46 @@ export default function Booking() {
     }
   };
 
-  const handleTimeSelect = (date: string, time: string) => {
-    setBooking({ ...booking, date, time });
+  const handleTimeSelect = (
+    date: string,
+    time: string,
+    assignee?: { employeeId: string; employeeName: string },
+  ) => {
+    setBooking((prev) => {
+      const next = { ...prev, date, time };
+      if (assignee && (!prev.employeeId || prev.employeeId === "")) {
+        next.employeeId = assignee.employeeId;
+        next.barber = assignee.employeeName;
+      }
+      return next;
+    });
   };
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-      <div className="text-center mb-8">
+      <div className="text-center mb-8 relative">
+        {isGuest && (
+          <div className="absolute right-0 top-0">
+            <LanguageSwitcher />
+          </div>
+        )}
         <h2 className="font-oswald text-3xl font-bold text-whiskey mb-2">
-          {text.title}
+          {isGuest ? text.guestTitle : text.title}
         </h2>
-        <p className="text-gray-400">{text.subtitle}</p>
+        <p className="text-gray-400">
+          {isGuest ? text.guestSubtitle : text.subtitle}
+        </p>
+        {isGuest && (
+          <>
+            <p className="mt-2 text-sm text-whiskey/80">{text.noPreferenceHint}</p>
+            <p className="mt-3 text-sm text-gray-500">
+              {text.signIn}?{" "}
+              <Link href="/login" className="text-whiskey hover:underline font-semibold">
+                {text.signIn}
+              </Link>
+            </p>
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
@@ -243,6 +343,60 @@ export default function Booking() {
             <h3 className="font-oswald text-xl text-whiskey mb-6">{text.details}</h3>
 
             <form onSubmit={handleSubmit} className="space-y-6">
+              {isGuest && (
+                <div className="space-y-4 pb-4 border-b border-steel">
+                  <div>
+                    <Label htmlFor="guestFirstName" className="text-whiskey font-semibold mb-2 block">
+                      {text.firstName} *
+                    </Label>
+                    <Input
+                      id="guestFirstName"
+                      value={guest.firstName}
+                      onChange={(e) => setGuest({ ...guest, firstName: e.target.value })}
+                      className="bg-charcoal border-steel text-white focus:border-whiskey"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="guestLastName" className="text-whiskey font-semibold mb-2 block">
+                      {text.lastName}
+                    </Label>
+                    <Input
+                      id="guestLastName"
+                      value={guest.lastName}
+                      onChange={(e) => setGuest({ ...guest, lastName: e.target.value })}
+                      className="bg-charcoal border-steel text-white focus:border-whiskey"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="guestEmail" className="text-whiskey font-semibold mb-2 block">
+                        {text.emailOptional}
+                      </Label>
+                      <Input
+                        id="guestEmail"
+                        type="email"
+                        value={guest.email}
+                        onChange={(e) => setGuest({ ...guest, email: e.target.value })}
+                        className="bg-charcoal border-steel text-white focus:border-whiskey"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="guestPhone" className="text-whiskey font-semibold mb-2 block">
+                        {text.phoneOptional}
+                      </Label>
+                      <Input
+                        id="guestPhone"
+                        type="tel"
+                        value={guest.phone}
+                        onChange={(e) => setGuest({ ...guest, phone: e.target.value })}
+                        className="bg-charcoal border-steel text-white focus:border-whiskey"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Service Selection */}
               <div>
                 <Label htmlFor="service" className="text-whiskey font-semibold mb-2 block">
@@ -251,7 +405,7 @@ export default function Booking() {
                 <Select value={booking.service} onValueChange={(value) => setBooking({ ...booking, service: value })}>
                   <SelectTrigger className="bg-charcoal border-steel text-white focus:border-whiskey">
                     <SelectValue placeholder={text.servicePlaceholder}>
-                      {booking.service ? services.find(s => s.value === booking.service)?.name : ""}
+                      {booking.service ? services.find(s => s.value === booking.service)?.name ?? "" : ""}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="bg-charcoal border-steel">
@@ -272,18 +426,26 @@ export default function Booking() {
               {/* Employee Selection */}
               <div>
                 <Label className="text-whiskey font-semibold mb-2 block">{text.barber}</Label>
+                <p className="text-xs text-whiskey/80 mb-3">{text.noPreferenceHint}</p>
                 {isLoadingEmployees ? (
                   <div className="text-gray-400">{text.loadingBarbers}</div>
                 ) : (
                   <div className="grid grid-cols-1 gap-2 sm:gap-3">
-                    {/* No Preference Option */}
                     <label className="cursor-pointer">
                       <input
                         type="radio"
                         name="employee"
                         value=""
                         checked={booking.employeeId === ""}
-                        onChange={() => setBooking({ ...booking, employeeId: "", barber: text.noPreference })}
+                        onChange={() =>
+                          setBooking({
+                            ...booking,
+                            employeeId: "",
+                            barber: text.noPreference,
+                            date: "",
+                            time: "",
+                          })
+                        }
                         className="sr-only"
                       />
                       <div className={`bg-charcoal border-2 ${booking.employeeId === "" ? "border-whiskey bg-slate" : "border-steel"} rounded-lg p-3 sm:p-4 transition-all hover:border-whiskey/50`}>
@@ -308,7 +470,15 @@ export default function Booking() {
                           name="employee"
                           value={employee.id}
                           checked={booking.employeeId === employee.id}
-                          onChange={(e) => setBooking({ ...booking, employeeId: e.target.value, barber: employee.name })}
+                          onChange={(e) =>
+                            setBooking({
+                              ...booking,
+                              employeeId: e.target.value,
+                              barber: employee.name,
+                              date: "",
+                              time: "",
+                            })
+                          }
                           className="sr-only"
                         />
                         <div className={`bg-charcoal border-2 ${booking.employeeId === employee.id ? "border-whiskey bg-slate" : "border-steel"} rounded-lg p-3 sm:p-4 transition-all hover:border-whiskey/50`}>
@@ -393,10 +563,16 @@ export default function Booking() {
                   <h4 className="text-whiskey font-semibold mb-2">{text.selectedAppointment}</h4>
                   <p className="text-white">📅 {booking.date}</p>
                   <p className="text-white">🕒 {booking.time}</p>
+                  {booking.employeeId && booking.barber && booking.barber !== text.noPreference && (
+                    <p className="text-white">
+                      💇 {text.assignedBarber}: {booking.barber}
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* Recurring Appointment Options */}
+              {/* Recurring — registered users only */}
+              {!isGuest && (
               <div className="border-t border-steel pt-4">
                 <div className="flex items-center space-x-2 mb-4">
                   <input
@@ -459,6 +635,7 @@ export default function Booking() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Special Requests */}
               <div>
@@ -477,18 +654,24 @@ export default function Booking() {
 
               {/* Action Buttons */}
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4 sm:pt-6">
-                <Link href="/dashboard" className="flex-1">
+                <Link href={isGuest ? "/" : "/dashboard"} className="flex-1">
                   <Button 
                     type="button" 
                     variant="outline"
                     className="w-full bg-steel hover:bg-iron text-white border-steel"
                   >
-                    {text.cancel}
+                    {isGuest ? text.backHome : text.cancel}
                   </Button>
                 </Link>
                 <Button
                   type="submit"
-                  disabled={createAppointmentMutation.isPending || !booking.service || !booking.date || !booking.time}
+                  disabled={
+                    createAppointmentMutation.isPending ||
+                    !booking.service ||
+                    !booking.date ||
+                    !booking.time ||
+                    (isGuest && !guest.firstName.trim())
+                  }
                   className="flex-1 whiskey-gradient hover:opacity-90 text-black font-semibold shine-effect disabled:opacity-50"
                 >
                   {createAppointmentMutation.isPending 
@@ -508,6 +691,7 @@ export default function Booking() {
             <AppointmentCalendar
               selectedEmployeeId={booking.employeeId}
               selectedService={booking.service}
+              slotDuration={selectedServiceDuration}
               onTimeSelect={handleTimeSelect}
               selectedDate={booking.date}
               selectedTime={booking.time}

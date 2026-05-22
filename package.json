@@ -17,6 +17,7 @@
     "rebuild-db": "cross-env DATABASE_URL=file:./database.sqlite node scripts/rebuild-database-drizzle.js",
     "fix-schema": "cross-env DATABASE_URL=file:./database.sqlite node fix-missing-schema-safe.js",
     "migrate-reminders": "cross-env DATABASE_URL=file:./database.sqlite node migrate-add-reminder-flags-safe.js",
+    "migrate:services-i18n": "cross-env DATABASE_URL=file:./database.sqlite node migrate-services-bilingual-safe.js",
     "import-backup": "node scripts/import-from-backup.js",
     "generate-icons": "tsx scripts/generate-icons.js",
     "generate-icons:ps1": "powershell -ExecutionPolicy Bypass -File scripts/generate-icons.ps1",
