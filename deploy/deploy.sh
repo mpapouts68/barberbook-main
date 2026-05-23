@@ -28,7 +28,8 @@ else
   echo "    EMAIL_USER=MISSING — confirmation emails will not send"
 fi
 
-npm ci
+# .env often has NODE_ENV=production — still need devDependencies (vite, esbuild, cross-env, drizzle-kit)
+npm ci --include=dev
 npm run build
 
 BUILT_JS="$(ls -1 dist/public/assets/index-*.js 2>/dev/null | head -1 || true)"

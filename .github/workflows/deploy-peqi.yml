@@ -72,9 +72,8 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
           command_timeout: 30m
-          script_stop: true
           script: |
-            set -e
+            set -euo pipefail
             APP_DIR="${{ secrets.VPS_APP_DIR }}"
             if [ -z "$APP_DIR" ]; then APP_DIR=/var/www/peqi; fi
             cd "$APP_DIR"
