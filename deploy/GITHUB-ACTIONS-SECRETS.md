@@ -52,7 +52,7 @@ After saving all secrets:
 
 1. **Actions** → **Deploy PEQI** → **Run workflow** → branch `main` → **Run workflow**
 
-Or push any commit to `main`.
+Or push any commit to `main` (triggers deploy automatically).
 
 ## Optional: organization secrets
 
