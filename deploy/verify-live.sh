@@ -3,27 +3,57 @@
 set -euo pipefail
 
 URL="${1:-https://peqi.hair}"
-HTML="$(curl -sfL "$URL/")"
-JS="$(echo "$HTML" | grep -oE '/assets/index-[^"]+\.js' | head -1)"
+MAX_ATTEMPTS="${VERIFY_LIVE_ATTEMPTS:-5}"
+SLEEP_SEC="${VERIFY_LIVE_SLEEP:-4}"
 
-if [[ -z "$JS" ]]; then
-  echo "FAIL: Could not find index-*.js in $URL"
-  exit 1
-fi
+MARKERS=(
+  "peqibarber@yahoo.com"
+  "peqi_haircut_studio"
+  "haircut_studio"
+  "Sanoudaki"
+  "302897023232"
+  "facebook.com/share"
+)
 
-echo "Live bundle: $JS"
-BODY="$(curl -sfL "$URL$JS")"
+attempt=1
+while [[ "$attempt" -le "$MAX_ATTEMPTS" ]]; do
+  echo "Verify attempt $attempt/$MAX_ATTEMPTS..."
 
-if echo "$BODY" | grep -q 'peqibarber@yahoo.com'; then
-  echo "OK: Contact/email bundle is current."
-  exit 0
-fi
+  HTML="$(curl -sfL "$URL/")" || {
+    echo "WARN: Could not fetch $URL/"
+    sleep "$SLEEP_SEC"
+    attempt=$((attempt + 1))
+    continue
+  }
 
-if echo "$BODY" | grep -q 'peqi_haircut_studio'; then
-  echo "OK: Instagram contact link found in bundle."
-  exit 0
-fi
+  JS="$(echo "$HTML" | grep -oE '/assets/index-[^"]+\.js' | head -1)"
+  if [[ -z "$JS" ]]; then
+    echo "WARN: No index-*.js in HTML"
+    sleep "$SLEEP_SEC"
+    attempt=$((attempt + 1))
+    continue
+  fi
 
-echo "STALE: Bundle does not contain expected PEQI contact strings."
-echo "      Run GitHub Actions deploy or: ssh VPS 'cd /var/www/peqi && bash deploy/deploy.sh'"
+  echo "Live bundle: $JS"
+  BODY="$(curl -sfL "$URL$JS")" || {
+    echo "WARN: Could not fetch bundle"
+    sleep "$SLEEP_SEC"
+    attempt=$((attempt + 1))
+    continue
+  }
+
+  for marker in "${MARKERS[@]}"; do
+    if echo "$BODY" | grep -qF "$marker"; then
+      echo "OK: Found '$marker' in live bundle."
+      exit 0
+    fi
+  done
+
+  echo "WARN: Bundle missing expected markers (cache or deploy still rolling out)."
+  sleep "$SLEEP_SEC"
+  attempt=$((attempt + 1))
+done
+
+echo "STALE: Live site did not match expected PEQI build after ${MAX_ATTEMPTS} attempts."
+echo "      If deploy.log shows 'Built frontend: dist/public/assets/index-....js' and HTTP 200, the app may still be fine — hard-refresh peqi.hair."
 exit 1

@@ -415,8 +415,9 @@ pm2 logs peqi --lines 20
 
 - Το **GitHub Actions rsync** **δεν** αντιγράφει `database.sqlite` / `barbershop.db` στο VPS — τα δεδομένα παραμένουν στο server.
 - Κάθε deploy τρέχει `deploy/deploy.sh`, που κάνει μόνο **προσθετικές** αλλαγές:
-  - `npm run db:push` (νέες στήλες/πίνακες από Drizzle)
-  - `npm run migrate:production` (`fix-schema`, `migrate-reminders`, `migrate:services-i18n` — idempotent, δεν διαγράφουν ραντεβού/χρήστες)
+  - `npm run migrate:production` (`fix-schema`, `migrate-reminders`, `migrate:services-i18n` — idempotent)
+  - **Όχι** αυτόματο `db:push` στο production (μπορεί να ζητήσει διαγραφή παλιών πινάκων όπως `sessions`)
+  - Χειροκίνητο schema μόνο αν ξέρετε τι κάνετε: `npm run db:push` (τοπικά ή SSH, με προσοχή)
 - **Μην** τρέχετε `npm run rebuild-db` ή `npm run seed` στο production.
 
 Χειροκίνητα (αν χρειαστεί):

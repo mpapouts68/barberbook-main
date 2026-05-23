@@ -49,7 +49,8 @@ if [[ -f "${DATABASE_URL#file:}" ]] || [[ -f "./database.sqlite" ]]; then
 else
   echo "    WARN: No database.sqlite yet — db:push will create an empty DB"
 fi
-npm run db:push || echo "WARN: db:push failed (continuing)"
+# Do not run `db:push` on production — it may prompt to DROP tables (e.g. legacy `sessions`).
+# Schema changes are applied via additive scripts below.
 npm run fix-schema || echo "WARN: fix-schema failed (continuing)"
 npm run migrate-reminders || echo "WARN: migrate-reminders failed (continuing)"
 npm run migrate:services-i18n || echo "WARN: migrate:services-i18n failed (continuing)"
