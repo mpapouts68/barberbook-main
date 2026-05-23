@@ -115,20 +115,24 @@ cat ~/.ssh/github_deploy    # αντιγράψτε — μόνο για secret VP
 
 ---
 
-## 2. Μία φορά — GitHub repo secrets
+## 2. Μία φορά — GitHub repo secrets (υποχρεωτικό)
 
-Στο repo: **Settings → Secrets and variables → Actions → New repository secret**
+**Σφάλμα `Could not resolve hostname` + κενό `VPS_HOST`:** δεν υπάρχουν secrets στο repo.
+
+👉 **https://github.com/mpapouts68/peqi/settings/secrets/actions** → **New repository secret**
 
 | Secret | Παράδειγμα |
 |--------|------------|
-| `VPS_HOST` | `203.0.113.10` (IPv4 PEQI VPS) |
+| `VPS_HOST` | `212.192.3.42` (μόνο IPv4, όχι URL) |
 | `VPS_USER` | `root` |
-| `VPS_SSH_KEY` | ιδιωτικό κλειδί `github_deploy` (ολόκληρο) |
+| `VPS_SSH_KEY` | ιδιωτικό κλειδί `github_deploy` (ολόκληρο αρχείο) |
 | `VPS_APP_DIR` | `/var/www/peqi` (προαιρετικό) |
 
-Το workflow **δεν** κάνει πλέον `git pull` στο VPS (συχνά αποτυγχάνει σε private repo). Στέλνει τον κώδικα με **rsync** και τρέχει `deploy/deploy.sh`.
+Οδηγός: **`deploy/GITHUB-ACTIONS-SECRETS.md`**
 
-Αν το Actions αποτύχει: δείτε το log του step **Sync files** ή **Run deploy**.
+Το workflow στέλνει κώδικα με **rsync** και τρέχει `deploy/deploy.sh` (όχι `git pull` στο VPS).
+
+Αν το Actions αποτύχει: log στα steps **Verify GitHub secrets**, **Sync files**, **Run deploy**.
 
 ### Οι αλλαγές δεν φαίνονται στο peqi.hair
 

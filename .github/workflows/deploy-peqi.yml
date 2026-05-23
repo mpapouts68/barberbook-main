@@ -21,6 +21,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Verify GitHub secrets
+        run: |
+          missing=""
+          [ -z "${{ secrets.VPS_HOST }}" ] && missing="${missing} VPS_HOST"
+          [ -z "${{ secrets.VPS_USER }}" ] && missing="${missing} VPS_USER"
+          [ -z "${{ secrets.VPS_SSH_KEY }}" ] && missing="${missing} VPS_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:${missing}"
+            echo "Add at: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "Guide: deploy/GITHUB-ACTIONS-SECRETS.md"
+            exit 1
+          fi
+          echo "Secrets OK (VPS_HOST and VPS_USER are set)"
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
