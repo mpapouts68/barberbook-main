@@ -130,6 +130,29 @@ cat ~/.ssh/github_deploy    # αντιγράψτε — μόνο για secret VP
 
 Αν το Actions αποτύχει: δείτε το log του step **Sync files** ή **Run deploy**.
 
+### Οι αλλαγές δεν φαίνονται στο peqi.hair
+
+**Σημαντικό:** Το VPS **δεν** ενημερώνεται με `git pull` μόνο του — το CI στέλνει κώδικα με **rsync** (χωρίς `.git`). Μετά το sync τρέχει `bash deploy/deploy.sh` (build + PM2).
+
+1. **GitHub → Actions → Deploy PEQI** — πρέπει να είναι πράσινο ✓ μετά το push. Αν κόκκινο, ανοίξτε το log (συχνά `npm ci`, `db:push`, ή SSH secret).
+
+2. **Έλεγχος live site** (τοπικά):
+   ```bash
+   bash deploy/verify-live.sh
+   ```
+   Αν γράψει `STALE`, το production δεν έχει κάνει build τις τελευταίες αλλαγές.
+
+3. **Χειροκίνητο update στο VPS** (μετά από επιτυχές Actions sync *ή* αν έχετε ήδη νέα αρχεία στο `/var/www/peqi`):
+   ```bash
+   ssh root@YOUR_PEQI_VPS_IP
+   cd /var/www/peqi
+   grep -q peqibarber client/src/lib/branding.ts && echo "source OK" || echo "SOURCE STALE — run GitHub Actions first"
+   bash deploy/deploy.sh
+   bash deploy/verify-live.sh
+   ```
+
+4. **PWA / cache:** Στο κινητό: Settings → site data → Clear για `peqi.hair`, ή hard refresh (Ctrl+Shift+R).
+
 ---
 
 ## 3. Κάθε deploy (εσείς)

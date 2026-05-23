@@ -31,22 +31,27 @@ fi
 npm ci
 npm run build
 
-echo "==> Database (production SQLite is NOT overwritten by deploy — only schema/migrations)..."
-if [[ -f "${DATABASE_URL#file:}" ]] || [[ -f "./database.sqlite" ]]; then
-  echo "    Existing DB found — applying additive schema + safe migrations"
-else
-  echo "    WARN: No database.sqlite yet — db:push will create an empty DB"
-fi
-npm run db:push
-npm run migrate:production
+BUILT_JS="$(ls -1 dist/public/assets/index-*.js 2>/dev/null | head -1 || true)"
+echo "==> Built frontend: ${BUILT_JS:-MISSING — build failed?}"
 
+# Reload app immediately so new static assets are served even if migrations fail later
 if pm2 describe peqi &>/dev/null; then
   pm2 reload deploy/ecosystem.config.cjs --update-env
 else
   pm2 start deploy/ecosystem.config.cjs
 fi
-
 pm2 save
+
+echo "==> Database (production SQLite is NOT overwritten — additive only)..."
+if [[ -f "${DATABASE_URL#file:}" ]] || [[ -f "./database.sqlite" ]]; then
+  echo "    Existing DB found — applying schema + safe migrations"
+else
+  echo "    WARN: No database.sqlite yet — db:push will create an empty DB"
+fi
+npm run db:push || echo "WARN: db:push failed (continuing)"
+npm run fix-schema || echo "WARN: fix-schema failed (continuing)"
+npm run migrate-reminders || echo "WARN: migrate-reminders failed (continuing)"
+npm run migrate:services-i18n || echo "WARN: migrate:services-i18n failed (continuing)"
 
 echo "==> Health check"
 sleep 2
