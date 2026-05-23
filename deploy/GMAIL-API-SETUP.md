@@ -27,7 +27,47 @@ https://developers.google.com/oauthplayground
 6. **Step 2** → **Exchange authorization code for tokens**.
 7. Copy the **Refresh token** (long string). Store it securely; treat it like a password.
 
-If the app is in **Testing** mode, add `peqihaircutstudio@gmail.com` under **OAuth consent screen → Test users**.
+### If you see `Error 403: access_denied` (Step 2 / Authorize APIs)
+
+This means Google **refused** the login/consent — fix **all** of the following in [Google Cloud Console](https://console.cloud.google.com/) (same project as client `517309401230-...`):
+
+1. **Gmail API enabled**  
+   APIs & Services → Library → **Gmail API** → Enable.
+
+2. **Correct OAuth client (Web application)**  
+   Credentials → open the client whose ID matches Playground → type must be **Web application** (not Desktop/iOS).
+
+3. **Redirect URI for Playground** (required)  
+   Under **Authorized redirect URIs**, add exactly:
+   ```text
+   https://developers.google.com/oauthplayground
+   ```
+   Save. Wait 1–2 minutes before retrying.
+
+4. **OAuth consent screen → Test users** (most common cause)  
+   APIs & Services → **OAuth consent screen**:
+   - If **Publishing status** is **Testing**, only listed test users can sign in.
+   - Click **Add users** and add **every** account you use in Playground, e.g.:
+     - `peqihaircutstudio@gmail.com`
+     - Your personal Google account if you sign in with that instead
+   - Save, then retry Playground in an **incognito** window.
+
+5. **Consent screen — scopes**  
+   On the consent screen → **Edit app** → **Scopes** → add (if missing):
+   `https://www.googleapis.com/auth/gmail.send`  
+   (or “Gmail API … Send email on your behalf”).
+
+6. **On the Google warning screen**  
+   If you see “Google hasn’t verified this app” → choose **Advanced** → **Go to PEQI (unsafe)** (wording varies).  
+   Do **not** click “Back to safety” — that produces `access_denied`.
+
+7. **Sign in with the right account**  
+   In Playground step **Authorize APIs**, pick the **same** Gmail you added as a test user (`peqihaircutstudio@gmail.com`).
+
+8. **Workspace / family account**  
+   If the mailbox is managed by an organization, an admin may need to allow the OAuth client or use a personal `@gmail.com` test user first.
+
+**Still failing?** Create a **new** OAuth client (Web) used only for mail: add only the Playground redirect URI, add test users, enable Gmail API, then use that client ID/secret in Playground.
 
 ## 3. VPS `.env`
 
@@ -77,7 +117,8 @@ email: Gmail API configured (HTTPS — works when VPS blocks SMTP)
 
 | Symptom | Fix |
 |--------|-----|
-| `403` / insufficient permissions | Re-run Playground with scope `gmail.send` only; new refresh token |
+| `403 access_denied` in Playground | See **§2 — If you see Error 403** (test users + redirect URI + Advanced → Continue) |
+| `403` / insufficient permissions (API) | Re-run Playground with scope `gmail.send` only; new refresh token |
 | `invalid_grant` | Token revoked; generate a new refresh token |
 | Still tries SMTP | Set `EMAIL_USE_GMAIL_API=true` and reload PM2 with `--update-env` |
 | SMTP timeout on VPS | Normal on Hostman; use Gmail API, do not open firewall for 587 |
