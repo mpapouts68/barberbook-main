@@ -125,9 +125,9 @@ export default function ShopGallery() {
           </div>
 
           {isLoading ? (
-            <div className="flex-1 grid grid-cols-2 gap-2 animate-pulse">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="bg-steel/40 rounded-lg aspect-[4/3]" />
+            <div className="flex-1 grid grid-cols-4 gap-1.5 animate-pulse">
+              {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                <div key={i} className="bg-steel/40 rounded-md aspect-square" />
               ))}
             </div>
           ) : photos.length === 0 ? (
@@ -140,11 +140,11 @@ export default function ShopGallery() {
             </div>
           ) : (
             <div className="flex-1 min-h-0 overflow-y-auto pr-1">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-4 gap-1.5">
                 {photos.map((photo) => (
                   <div
                     key={photo.id}
-                    className="group relative aspect-[4/3] rounded-lg overflow-hidden border border-whiskey/20 bg-charcoal/60 shadow-md"
+                    className="group relative aspect-square rounded-md overflow-hidden border border-whiskey/20 bg-charcoal/60 shadow-sm"
                   >
                     <button
                       type="button"
@@ -164,7 +164,7 @@ export default function ShopGallery() {
                         type="button"
                         size="icon"
                         variant="destructive"
-                        className="absolute top-2 right-2 h-8 w-8 opacity-90"
+                        className="absolute top-1 right-1 h-6 w-6 opacity-90"
                         disabled={deleteMutation.isPending}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -172,7 +172,7 @@ export default function ShopGallery() {
                         }}
                         title={text.delete}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3 h-3" />
                       </Button>
                     )}
                   </div>
