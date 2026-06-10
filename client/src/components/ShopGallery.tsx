@@ -148,7 +148,7 @@ export default function ShopGallery() {
                   >
                     <button
                       type="button"
-                      className="absolute inset-0 w-full h-full"
+                      className="absolute inset-0 z-0 w-full h-full"
                       onClick={() => setPreviewUrl(photo.url)}
                       aria-label={photo.caption || "Shop photo"}
                     >
@@ -159,12 +159,16 @@ export default function ShopGallery() {
                         loading="lazy"
                       />
                     </button>
+                    <div
+                      className="absolute inset-0 z-[1] bg-black/25 pointer-events-none transition-colors group-hover:bg-black/10"
+                      aria-hidden
+                    />
                     {isAdmin && (
                       <Button
                         type="button"
                         size="icon"
                         variant="destructive"
-                        className="absolute top-1 right-1 h-6 w-6 opacity-90"
+                        className="absolute top-1 right-1 z-[2] h-6 w-6 opacity-90"
                         disabled={deleteMutation.isPending}
                         onClick={(e) => {
                           e.stopPropagation();
