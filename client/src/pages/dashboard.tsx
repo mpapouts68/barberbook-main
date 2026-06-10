@@ -6,6 +6,7 @@ import { api } from "@/services/api";
 import { CalendarPlus, Clock, Gift, UserCircle, Shield } from "lucide-react";
 import { Link } from "wouter";
 import NamedayPanel from "@/components/nameday-panel";
+import ShopGallery from "@/components/ShopGallery";
 import type { Appointment } from "@shared/schema";
 import bannerImg from "@assets/BANNER.png";
 import appointmentImg from "@assets/APPOINTMENT2.png";
@@ -268,9 +269,14 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Today's Namedays Section */}
-      <div id="nameday-section">
-        <NamedayPanel />
+      {/* Namedays + shop gallery */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-stretch">
+        <div id="nameday-section" className="min-h-[320px]">
+          <NamedayPanel compact />
+        </div>
+        <div id="shop-section" className="min-h-[320px]">
+          <ShopGallery />
+        </div>
       </div>
 
       {/* Recent Activity */}

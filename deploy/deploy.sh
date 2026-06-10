@@ -54,6 +54,7 @@ fi
 npm run fix-schema || echo "WARN: fix-schema failed (continuing)"
 npm run migrate-reminders || echo "WARN: migrate-reminders failed (continuing)"
 npm run migrate:services-i18n || echo "WARN: migrate:services-i18n failed (continuing)"
+npm run migrate:shop-photos || echo "WARN: migrate:shop-photos failed (continuing)"
 
 echo "==> Health check"
 sleep 2

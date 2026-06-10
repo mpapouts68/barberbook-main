@@ -1,7 +1,7 @@
 import { db } from "./db";
-import { users, appointments, namedays, pushMessages, settings, employees, companyInfo, shopConfig, googleCalendarConfig, oauthConfig, services, fcmTokens, notifications } from "@shared/schema";
-import { eq, and, desc, or, inArray } from "drizzle-orm";
-import type { User, InsertUser, Appointment, InsertAppointment, Nameday, PushMessage, InsertPushMessage, Setting, Employee, InsertEmployee, CompanyInfo, InsertCompanyInfo, GoogleCalendarConfig, InsertGoogleCalendarConfig, OAuthConfig, InsertOAuthConfig, Service, InsertService, FcmToken, InsertFcmToken, Notification, InsertNotification } from "@shared/schema";
+import { users, appointments, namedays, pushMessages, settings, employees, companyInfo, shopConfig, googleCalendarConfig, oauthConfig, services, shopPhotos, fcmTokens, notifications } from "@shared/schema";
+import { eq, and, desc, or, inArray, asc } from "drizzle-orm";
+import type { User, InsertUser, Appointment, InsertAppointment, Nameday, PushMessage, InsertPushMessage, Setting, Employee, InsertEmployee, CompanyInfo, InsertCompanyInfo, GoogleCalendarConfig, InsertGoogleCalendarConfig, OAuthConfig, InsertOAuthConfig, Service, InsertService, ShopPhoto, InsertShopPhoto, FcmToken, InsertFcmToken, Notification, InsertNotification } from "@shared/schema";
 
 export interface IStorage {
   // User operations
@@ -82,6 +82,12 @@ export interface IStorage {
   createService(service: InsertService): Promise<Service>;
   updateService(id: string, service: Partial<InsertService>): Promise<Service>;
   deleteService(id: string): Promise<void>;
+
+  // Shop gallery
+  getShopPhotos(): Promise<ShopPhoto[]>;
+  createShopPhoto(photo: InsertShopPhoto): Promise<ShopPhoto>;
+  getShopPhoto(id: string): Promise<ShopPhoto | undefined>;
+  deleteShopPhoto(id: string): Promise<void>;
 
   // FCM Token operations
   saveFcmToken(userId: string, token: string, deviceInfo?: string): Promise<FcmToken>;
@@ -521,6 +527,27 @@ export class DatabaseStorage implements IStorage {
 
   async deleteService(id: string): Promise<void> {
     await db.delete(services).where(eq(services.id, id));
+  }
+
+  async getShopPhotos(): Promise<ShopPhoto[]> {
+    return await db
+      .select()
+      .from(shopPhotos)
+      .orderBy(asc(shopPhotos.displayOrder), desc(shopPhotos.createdAt));
+  }
+
+  async createShopPhoto(photo: InsertShopPhoto): Promise<ShopPhoto> {
+    const [result] = await db.insert(shopPhotos).values(photo).returning();
+    return result;
+  }
+
+  async getShopPhoto(id: string): Promise<ShopPhoto | undefined> {
+    const [row] = await db.select().from(shopPhotos).where(eq(shopPhotos.id, id));
+    return row || undefined;
+  }
+
+  async deleteShopPhoto(id: string): Promise<void> {
+    await db.delete(shopPhotos).where(eq(shopPhotos.id, id));
   }
 
   // FCM Token operations

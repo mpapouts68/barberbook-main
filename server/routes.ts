@@ -156,30 +156,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const imageFileFilter: multer.Options["fileFilter"] = (req, file, cb) => {
+    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    const allowedExtensions = /\.(jpeg|jpg|png|gif|webp)$/i;
+    const isValidMime = allowedMimes.includes(file.mimetype);
+    const isValidExt = allowedExtensions.test(path.extname(file.originalname));
+    if (isValidMime && isValidExt) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'));
+    }
+  };
+
   const upload = multer({
     storage: storage_multer,
-    limits: {
-      fileSize: 5 * 1024 * 1024, // 5MB limit
-    },
-    fileFilter: (req, file, cb) => {
-      // Validate MIME type (more secure than extension check)
-      const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-      const allowedExtensions = /\.(jpeg|jpg|png|gif|webp)$/i;
-      
-      const isValidMime = allowedMimes.includes(file.mimetype);
-      const isValidExt = allowedExtensions.test(path.extname(file.originalname));
-      
-      if (isValidMime && isValidExt) {
-        cb(null, true);
-      } else {
-        cb(new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed.'));
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: imageFileFilter,
+  });
+
+  const shopStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'shop');
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
       }
-    }
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, `shop-${uniqueSuffix}${path.extname(file.originalname)}`);
+    },
+  });
+
+  const uploadShop = multer({
+    storage: shopStorage,
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: imageFileFilter,
   });
 
   // Ensure upload directories exist before serving static files
   const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
   const avatarsDir = path.join(uploadsDir, 'avatars');
+  const shopDir = path.join(uploadsDir, 'shop');
   
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
@@ -188,6 +206,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   if (!fs.existsSync(avatarsDir)) {
     fs.mkdirSync(avatarsDir, { recursive: true });
     console.log(`✅ Created avatars directory: ${avatarsDir}`);
+  }
+  if (!fs.existsSync(shopDir)) {
+    fs.mkdirSync(shopDir, { recursive: true });
+    console.log(`✅ Created shop gallery directory: ${shopDir}`);
   }
   
   // Serve static files from public directory
@@ -1893,6 +1915,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
         success: false,
         message: error.message || "Failed to upload avatar" 
       });
+    }
+  });
+
+  // Shop photo gallery
+  app.get("/api/shop-photos", requireAuth, async (req, res) => {
+    try {
+      const photos = await storage.getShopPhotos();
+      res.json(photos);
+    } catch (error) {
+      console.error("Error fetching shop photos:", error);
+      res.status(500).json({ message: "Failed to fetch shop photos" });
+    }
+  });
+
+  app.post("/api/admin/shop-photos", requireAdmin, uploadShop.single("photo"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No image uploaded" });
+      }
+
+      const filePath = path.join(shopDir, req.file.filename);
+      if (!fs.existsSync(filePath)) {
+        return res.status(500).json({ message: "File upload failed" });
+      }
+
+      const url = `/uploads/shop/${req.file.filename}`;
+      const caption = typeof req.body.caption === "string" ? req.body.caption.trim() : "";
+      const existing = await storage.getShopPhotos();
+      const photo = await storage.createShopPhoto({
+        url,
+        caption: caption || null,
+        displayOrder: existing.length,
+      });
+
+      res.status(201).json(photo);
+    } catch (error: unknown) {
+      console.error("Error uploading shop photo:", error);
+      const message = error instanceof Error ? error.message : "Failed to upload photo";
+      res.status(500).json({ message });
+    }
+  });
+
+  app.delete("/api/admin/shop-photos/:id", requireAdmin, async (req, res) => {
+    try {
+      const photo = await storage.getShopPhoto(req.params.id);
+      if (!photo) {
+        return res.status(404).json({ message: "Photo not found" });
+      }
+
+      const relative = photo.url.replace(/^\/uploads\/shop\//, "");
+      const filePath = path.join(shopDir, relative);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      await storage.deleteShopPhoto(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting shop photo:", error);
+      res.status(500).json({ message: "Failed to delete photo" });
     }
   });
 

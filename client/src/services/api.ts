@@ -74,6 +74,40 @@ export const api = {
     return response.json();
   },
 
+  // Shop gallery
+  async getShopPhotos() {
+    const response = await apiRequest("/api/shop-photos", "GET");
+    return response.json();
+  },
+
+  async uploadShopPhoto(file: File, caption?: string) {
+    const formData = new FormData();
+    formData.append("photo", file);
+    if (caption) formData.append("caption", caption);
+    const response = await fetch("/api/admin/shop-photos", {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || "Failed to upload photo");
+    }
+    return body;
+  },
+
+  async deleteShopPhoto(id: string) {
+    const response = await fetch(`/api/admin/shop-photos/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || "Failed to delete photo");
+    }
+    return response.json();
+  },
+
   // Namedays
   async checkNamedays() {
     const response = await apiRequest("/api/nameday/check", "GET");

@@ -164,6 +164,14 @@ export const shopConfig = sqliteTable("shop_config", {
   updatedAt: integer("updated_at", { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+export const shopPhotos = sqliteTable("shop_photos", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  url: text("url").notNull(),
+  caption: text("caption"),
+  displayOrder: integer("display_order").notNull().default(0),
+  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
 export const services = sqliteTable("services", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
@@ -244,6 +252,11 @@ export const insertOAuthConfigSchema = createInsertSchema(oauthConfig).omit({
   updatedAt: true,
 });
 
+export const insertShopPhotoSchema = createInsertSchema(shopPhotos).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertServiceSchema = createInsertSchema(services).omit({
   id: true,
   createdAt: true,
@@ -280,6 +293,8 @@ export type GoogleCalendarConfig = typeof googleCalendarConfig.$inferSelect;
 export type InsertGoogleCalendarConfig = z.infer<typeof insertGoogleCalendarConfigSchema>;
 export type OAuthConfig = typeof oauthConfig.$inferSelect;
 export type InsertOAuthConfig = z.infer<typeof insertOAuthConfigSchema>;
+export type ShopPhoto = typeof shopPhotos.$inferSelect;
+export type InsertShopPhoto = z.infer<typeof insertShopPhotoSchema>;
 export type Service = typeof services.$inferSelect;
 export type InsertService = z.infer<typeof insertServiceSchema>;
 export type Notification = typeof notifications.$inferSelect;

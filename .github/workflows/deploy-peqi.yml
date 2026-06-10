@@ -56,6 +56,8 @@ jobs:
             --exclude '.env' \
             --exclude 'database.sqlite' \
             --exclude 'barbershop.db' \
+            --exclude 'public/uploads/shop/*' \
+            --exclude 'public/uploads/avatars/*' \
             --exclude 'project_archive' \
             --exclude 'testsprite_tests' \
             -e "$RSYNC_SSH" \

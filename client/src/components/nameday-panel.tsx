@@ -6,27 +6,39 @@ import { Link } from "wouter";
 import eortologioImg from "@assets/EORTOLOGIO.png";
 import { useLanguage } from "@/context/language-context";
 
-export default function NamedayPanel() {
+const COMPACT_NAME_LIMIT = 5;
+
+export default function NamedayPanel({ compact = false }: { compact?: boolean }) {
   const { isEnglish } = useLanguage();
   const { data: todaysNamedays = [], isLoading } = useQuery({
     queryKey: ["/api/nameday/today"],
   });
 
   const text = {
-    title: isEnglish ? "TODAY'S NAME DAYS" : "ΣΗΜΕΡΙΝΕΣ ΓΙΟΡΤΕΣ ΟΝΟΜΑΤΟΣ",
-    offerBadge: isEnglish ? "Special Offer!" : "Ειδική Προσφορά!",
-    offerTitle: isEnglish ? "Special Offer for Name Days!" : "🎉 Ειδική Προσφορά για Γιορτές Ονόματος!",
-    celebratingToday: isEnglish ? "Celebrating today" : "Γιορτάζουν σήμερα",
-    discount: isEnglish ? "20% OFF" : "20% ΕΚΠΤΩΣΗ",
-    bookDiscount: isEnglish ? "Book Appointment with Discount" : "Κλείσε Ραντεβού με Έκπτωση",
+    title: isEnglish ? "TODAY'S NAME DAYS" : "ΣΗΜΕΡΙΝΕΣ ΓΙΟΡΤΕΣ",
+    offerBadge: isEnglish ? "20% off" : "20% έκπτωση",
+    offerShort: isEnglish
+      ? "Name day or birthday today? Enjoy 20% off any service."
+      : "Ονομαστική ή γενέθλια σήμερα; 20% έκπτωση σε κάθε υπηρεσία.",
+    celebratingToday: isEnglish ? "Today" : "Σήμερα",
+    bookDiscount: isEnglish ? "Book with discount" : "Κλείσε με έκπτωση",
     noNamedays: isEnglish ? "No celebrations today" : "Δεν υπάρχουν γιορτές σήμερα",
-    checkTomorrow: isEnglish ? "Check again tomorrow for special offers!" : "Ελέγξτε ξανά αύριο για ειδικές προσφορές!",
+    andMore: (n: number) =>
+      isEnglish ? `+${n} more` : `+${n} ακόμα`,
   };
+
+  const names = Array.isArray(todaysNamedays) ? todaysNamedays : [];
+  const visibleNames = compact ? names.slice(0, COMPACT_NAME_LIMIT) : names;
+  const hiddenCount = compact ? Math.max(0, names.length - COMPACT_NAME_LIMIT) : 0;
+
+  const cardClass = compact
+    ? "relative border-steel overflow-hidden h-full flex flex-col"
+    : "relative border-steel mb-8 overflow-hidden";
 
   if (isLoading) {
     return (
       <Card
-        className="relative border-steel mb-8 overflow-hidden min-h-[200px]"
+        className={`${cardClass} min-h-[200px]`}
         style={{
           backgroundImage: `url(${eortologioImg})`,
           backgroundSize: "cover",
@@ -34,13 +46,10 @@ export default function NamedayPanel() {
         }}
       >
         <div className="absolute inset-0 bg-charcoal/85 z-0" aria-hidden />
-        <CardContent className="relative z-10 p-6">
-          <div className="animate-pulse">
-            <div className="h-6 bg-steel rounded w-1/3 mb-4"></div>
-            <div className="space-y-2">
-              <div className="h-16 bg-steel rounded"></div>
-              <div className="h-16 bg-steel rounded"></div>
-            </div>
+        <CardContent className="relative z-10 p-5">
+          <div className="animate-pulse space-y-2">
+            <div className="h-5 bg-steel rounded w-2/3" />
+            <div className="h-12 bg-steel rounded" />
           </div>
         </CardContent>
       </Card>
@@ -49,7 +58,7 @@ export default function NamedayPanel() {
 
   return (
     <Card
-      className="relative border-steel mb-8 overflow-hidden"
+      className={cardClass}
       style={{
         backgroundImage: `url(${eortologioImg})`,
         backgroundSize: "cover",
@@ -57,72 +66,64 @@ export default function NamedayPanel() {
       }}
     >
       <div className="absolute inset-0 bg-charcoal/85 z-0" aria-hidden />
-      <CardContent className="relative z-10 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-oswald text-2xl font-bold text-whiskey flex items-center [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
-            <CalendarDays className="text-whiskey mr-3" size={24} />
+      <CardContent className={`relative z-10 flex flex-col min-h-0 ${compact ? "p-5 h-full" : "p-6"}`}>
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h3
+            className={`font-oswald font-bold text-whiskey flex items-center [text-shadow:0_1px_3px_rgba(0,0,0,0.8)] ${
+              compact ? "text-lg" : "text-2xl"
+            }`}
+          >
+            <CalendarDays className="text-whiskey mr-2 shrink-0" size={compact ? 20 : 24} />
             {text.title}
           </h3>
-          {Array.isArray(todaysNamedays) && todaysNamedays.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Gift className="text-whiskey" size={20} />
-              <span className="text-whiskey font-semibold [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]">{text.offerBadge}</span>
-            </div>
+          {names.length > 0 && (
+            <span className="text-emerald-400 text-xs font-semibold whitespace-nowrap flex items-center gap-1">
+              <Gift size={14} />
+              {text.offerBadge}
+            </span>
           )}
         </div>
-        
-        {Array.isArray(todaysNamedays) && todaysNamedays.length > 0 ? (
+
+        {names.length > 0 ? (
           <>
-            <div className="mb-4 p-4 bg-emerald-600/20 border border-emerald-600/50 rounded-lg">
-              <p className="text-white font-semibold mb-2">
-                {text.offerTitle}
-              </p>
-              <p className="text-gray-300 text-sm">
-                {isEnglish ? (
-                  <>
-                    If you're celebrating today (name day or birthday), enjoy <strong className="text-emerald-400">20% off</strong> any service!
-                  </>
-                ) : (
-                  <>
-                    Αν γιορτάζεις σήμερα (ονομαστική ή γενέθλια), απολαύστε <strong className="text-emerald-400">20% έκπτωση</strong> σε οποιαδήποτε υπηρεσία!
-                  </>
-                )}
-              </p>
-            </div>
-            
-            <div className="space-y-2 mb-4">
-              {todaysNamedays.map((name: string, index: number) => (
-                <div key={index} className="flex items-center justify-between bg-charcoal rounded-lg p-4 hover:bg-slate/20 transition-colors">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 whiskey-gradient rounded-full flex items-center justify-center mr-3">
-                      <User className="text-black" size={20} />
-                    </div>
-                    <div>
-                      <p className="text-white font-semibold">{name}</p>
-                      <p className="text-gray-200 text-sm">{text.celebratingToday}</p>
-                    </div>
+            <p className="text-gray-300 text-xs mb-3 leading-relaxed">{text.offerShort}</p>
+
+            <div
+              className={`space-y-1.5 mb-3 ${compact ? "flex-1 min-h-0 overflow-y-auto max-h-40" : "space-y-2 mb-4"}`}
+            >
+              {visibleNames.map((name: string, index: number) => (
+                <div
+                  key={`${name}-${index}`}
+                  className="flex items-center gap-2 bg-charcoal/80 rounded-lg px-3 py-2"
+                >
+                  <div className="w-8 h-8 whiskey-gradient rounded-full flex items-center justify-center shrink-0">
+                    <User className="text-black" size={16} />
                   </div>
-                  <div className="bg-emerald-600 text-white px-3 py-1 rounded-full text-sm font-semibold">
-                    {text.discount}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-white font-medium text-sm truncate">{name}</p>
+                    <p className="text-gray-400 text-xs">{text.celebratingToday}</p>
                   </div>
                 </div>
               ))}
+              {hiddenCount > 0 && (
+                <p className="text-center text-gray-400 text-xs py-1">{text.andMore(hiddenCount)}</p>
+              )}
             </div>
-            
+
             <Link href="/booking">
-              <Button className="w-full whiskey-gradient hover:opacity-90 text-black font-semibold">
+              <Button
+                size={compact ? "sm" : "default"}
+                className="w-full whiskey-gradient hover:opacity-90 text-black font-semibold"
+              >
                 <Gift className="w-4 h-4 mr-2" />
                 {text.bookDiscount}
               </Button>
             </Link>
           </>
         ) : (
-          <div className="text-center py-8">
-            <Gift className="w-16 h-16 text-gray-400 mx-auto mb-4 opacity-70" />
-            <p className="text-gray-200 mb-2 [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]">{text.noNamedays}</p>
-            <p className="text-gray-300 text-sm [text-shadow:0_1px_2px_rgba(0,0,0,0.4)]">
-              {text.checkTomorrow}
-            </p>
+          <div className={`text-center ${compact ? "py-6" : "py-8"}`}>
+            <Gift className="w-10 h-10 text-gray-400 mx-auto mb-2 opacity-70" />
+            <p className="text-gray-200 text-sm">{text.noNamedays}</p>
           </div>
         )}
       </CardContent>
