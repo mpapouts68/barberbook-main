@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "@/services/api";
 import { ImagePlus, Loader2, Store, Trash2, X } from "lucide-react";
 import type { ShopPhoto } from "@shared/schema";
+import shopBgImg from "@assets/shop.jpg";
 
 export default function ShopGallery() {
   const { user } = useAuth();
@@ -75,15 +76,23 @@ export default function ShopGallery() {
 
   return (
     <>
-      <Card className="metal-gradient border-steel h-full flex flex-col overflow-hidden">
-        <CardContent className="p-5 flex flex-col flex-1 min-h-0">
+      <Card
+        className="relative border-steel h-full flex flex-col overflow-hidden"
+        style={{
+          backgroundImage: `url(${shopBgImg})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
+        <div className="absolute inset-0 bg-charcoal/88 z-0" aria-hidden />
+        <CardContent className="relative z-10 p-5 flex flex-col flex-1 min-h-0">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
-              <h3 className="font-oswald text-xl font-bold text-whiskey flex items-center gap-2">
+              <h3 className="font-oswald text-xl font-bold text-whiskey flex items-center gap-2 [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
                 <Store className="w-5 h-5" />
                 {text.title}
               </h3>
-              <p className="text-gray-400 text-sm mt-1">{text.subtitle}</p>
+              <p className="text-gray-200 text-sm mt-1 [text-shadow:0_1px_2px_rgba(0,0,0,0.6)]">{text.subtitle}</p>
             </div>
             {isAdmin && (
               <>
@@ -122,9 +131,9 @@ export default function ShopGallery() {
               ))}
             </div>
           ) : photos.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-8 px-4 border border-dashed border-steel rounded-lg">
-              <Store className="w-12 h-12 text-gray-500 mb-3 opacity-60" />
-              <p className="text-gray-300">{text.empty}</p>
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-8 px-4 border border-dashed border-whiskey/30 rounded-lg bg-charcoal/40 backdrop-blur-sm">
+              <Store className="w-12 h-12 text-gray-400 mb-3 opacity-80" />
+              <p className="text-gray-200">{text.empty}</p>
               {isAdmin && (
                 <p className="text-gray-500 text-sm mt-1">{text.emptyAdmin}</p>
               )}
@@ -135,7 +144,7 @@ export default function ShopGallery() {
                 {photos.map((photo) => (
                   <div
                     key={photo.id}
-                    className="group relative aspect-[4/3] rounded-lg overflow-hidden border border-steel/60 bg-charcoal"
+                    className="group relative aspect-[4/3] rounded-lg overflow-hidden border border-whiskey/20 bg-charcoal/60 shadow-md"
                   >
                     <button
                       type="button"
