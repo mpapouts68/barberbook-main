@@ -7,14 +7,14 @@ interface SplashScreenProps {
 }
 
 export default function SplashScreen({ onComplete }: SplashScreenProps) {
-  const { brandLogo, brandLogoLandscape, brandLogoAlt, brandName, brandTagline } = useBranding();
+  const { brandLogoLandscape, brandLogoAlt, brandName, brandTagline } = useBranding();
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsVisible(false);
-      setTimeout(onComplete, 500); // Allow fade out animation
-    }, 3000);
+      setTimeout(onComplete, 500);
+    }, 2500);
 
     return () => clearTimeout(timer);
   }, [onComplete]);
@@ -25,25 +25,13 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
         isVisible ? "opacity-100" : "opacity-0"
       }`}
     >
-      <div className="text-center px-6 max-w-lg mx-auto">
+      <div className="text-center px-6 max-w-xl mx-auto">
         <img
           src={brandLogoLandscape}
           alt={brandLogoAlt}
-          className="h-24 sm:h-32 md:h-40 w-auto max-w-[min(100%,24rem)] mx-auto mb-8 object-contain"
+          className="login-brand-hero mx-auto mb-8"
         />
 
-        <div className="w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 mx-auto mb-8 relative">
-          <div className="absolute inset-0 whiskey-gradient rounded-full opacity-20 animate-ping"></div>
-          <div className="relative z-10 w-full h-full rounded-full flex items-center justify-center bg-black/30 backdrop-blur-sm">
-            <img
-              src={brandLogo}
-              alt={brandLogoAlt}
-              className="w-[92%] h-[92%] object-contain rounded-full"
-            />
-          </div>
-        </div>
-        
-        {/* Brand name */}
         <h1 className="font-oswald text-4xl font-bold text-whiskey mb-2 animate-pulse-whiskey">
           {brandName}
         </h1>
@@ -51,7 +39,6 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
 
         <SocialContactBadges className="mt-6" />
 
-        {/* Loading indicator */}
         <div className="mt-8 w-16 h-1 whiskey-gradient mx-auto rounded-full animate-pulse-whiskey"></div>
       </div>
     </div>

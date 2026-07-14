@@ -59,7 +59,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const { user, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(false);
   const isPublicAuthRoute =
     location === "/" ||
     location === "/login" ||

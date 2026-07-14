@@ -16,7 +16,7 @@ import LanguageSwitcher from "@/components/language-switcher";
 import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD } from "@shared/demoDefaults";
 
 export default function Login() {
-  const { brandFullName, brandLogo, brandLogoLandscape, brandLogoAlt } = useBranding();
+  const { brandFullName, brandLogoLandscape, brandLogoAlt } = useBranding();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { isEnglish } = useLanguage();
@@ -132,20 +132,15 @@ export default function Login() {
       <div className="absolute top-4 right-4 z-10">
         <LanguageSwitcher />
       </div>
-      <Card className="max-w-xl w-full metal-gradient border-steel shadow-2xl">
-        <CardContent className="p-8 sm:p-10">
+      <Card className="max-w-2xl w-full metal-gradient border-steel shadow-2xl">
+        <CardContent className="p-6 sm:p-10">
           <div className="text-center mb-8">
             <img
               src={brandLogoLandscape}
               alt={brandLogoAlt}
-              className="h-28 sm:h-36 md:h-44 w-auto max-w-[min(100%,28rem)] mx-auto mb-6 object-contain"
+              className="login-brand-hero mx-auto mb-6"
             />
-            <img
-              src={brandLogo}
-              alt={brandLogoAlt}
-              className="w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 mx-auto object-contain rounded-full"
-            />
-            <h2 className="font-oswald text-3xl sm:text-4xl font-bold text-whiskey mt-6 mb-2">
+            <h2 className="font-oswald text-3xl sm:text-4xl font-bold text-whiskey mb-2">
               {text.title}
             </h2>
             <p className="text-gray-400 text-base sm:text-lg">{text.subtitle}</p>

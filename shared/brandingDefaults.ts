@@ -121,8 +121,8 @@ export const DEFAULT_BRANDING: BrandingSettings = {
   businessNameEn: "BarberBook",
   tagline: "Κλείσε το κούρεμά σου",
   taglineEn: "Book Your Cut",
-  logoUrl: "/branding/logo-round.png",
-  logoLandscapeUrl: "/branding/logo-landscape.png",
+  logoUrl: "/branding/barberbook-logo.png",
+  logoLandscapeUrl: "/branding/barberbook-logo.png",
   ...DEFAULT_BRANDING_COLORS,
   landingImages: {},
 };
