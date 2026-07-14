@@ -108,6 +108,64 @@ export const api = {
     return response.json();
   },
 
+  // Branding
+  async updateBranding(data: Record<string, unknown>) {
+    const response = await fetch("/api/admin/branding", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(data),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || "Failed to update branding");
+    }
+    return body;
+  },
+
+  async uploadBrandingLogo(file: File, variant: "round" | "landscape") {
+    const formData = new FormData();
+    formData.append("logo", file);
+    formData.append("variant", variant);
+    const response = await fetch("/api/admin/branding/logo", {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || "Failed to upload logo");
+    }
+    return body;
+  },
+
+  async uploadBrandingLanding(slot: string, file: File) {
+    const formData = new FormData();
+    formData.append("image", file);
+    const response = await fetch(`/api/admin/branding/landing/${slot}`, {
+      method: "POST",
+      credentials: "include",
+      body: formData,
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || "Failed to upload landing image");
+    }
+    return body;
+  },
+
+  async clearBrandingLanding(slot: string) {
+    const response = await fetch(`/api/admin/branding/landing/${slot}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.message || "Failed to clear landing image");
+    }
+    return body;
+  },
+
   // Namedays
   async checkNamedays() {
     const response = await apiRequest("/api/nameday/check", "GET");

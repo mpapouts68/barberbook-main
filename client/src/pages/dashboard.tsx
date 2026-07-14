@@ -8,19 +8,21 @@ import { Link } from "wouter";
 import NamedayPanel from "@/components/nameday-panel";
 import ShopGallery from "@/components/ShopGallery";
 import type { Appointment } from "@shared/schema";
-import bannerImg from "@assets/BANNER.png";
-import appointmentImg from "@assets/APPOINTMENT2.png";
-import myAppointmentsImg from "@assets/MYAPPOINTMENTS.png";
-import eortologioImg from "@assets/EORTOLOGIO.png";
-import settingsImg from "@assets/SETTINGS.png";
-import prosfataImg from "@assets/PROSFATA.png";
 import { useLanguage } from "@/context/language-context";
 import { resolveServiceName } from "@/lib/serviceLabels";
-import { brandLogo, brandLogoAlt, brandName } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { isEnglish, localeCode } = useLanguage();
+  const { brandLogo, brandLogoAlt, brandName, landingImage } = useBranding();
+
+  const bannerImg = landingImage("banner");
+  const appointmentImg = landingImage("bookAppointment");
+  const myAppointmentsImg = landingImage("myAppointments");
+  const eortologioImg = landingImage("nameday");
+  const settingsImg = landingImage("profile");
+  const prosfataImg = landingImage("recentActivity");
 
   const text = {
     welcomeFallback: isEnglish ? "User" : "Χρήστη",

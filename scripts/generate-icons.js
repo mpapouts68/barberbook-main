@@ -1,11 +1,11 @@
 /**
- * Script to generate PWA icons from the PEQI logo
+ * Script to generate PWA icons from the BarberBook logo
  * 
  * Usage: node scripts/generate-icons.js
  * 
  * Requirements:
  * - npm install -D sharp
- * - Source logo should be at: peqi_logo_round.PNG
+ * - Source logo: attached_assets/barberbook.png (or client/public/branding/default-logo.png)
  */
 
 import sharp from "sharp";
@@ -17,7 +17,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 
-const sourceLogo = path.join(rootDir, "peqi_logo_round.PNG");
+const sourceLogo = fs.existsSync(path.join(rootDir, "attached_assets", "barberbook.png"))
+  ? path.join(rootDir, "attached_assets", "barberbook.png")
+  : path.join(rootDir, "client", "public", "branding", "default-logo.png");
 const iconsDir = path.join(rootDir, "client", "public", "icons");
 const publicDir = path.join(rootDir, "client", "public");
 

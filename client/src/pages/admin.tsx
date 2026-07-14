@@ -17,6 +17,7 @@ import type { Appointment, PushMessage, Employee, CompanyInfo } from "@shared/sc
 import { WorkingHoursManager } from "@/components/WorkingHoursManager";
 import { EmployeeWorkingHoursEditor, parseEmployeeWorkingHours, type EmployeeWorkingHoursConfig } from "@/components/EmployeeWorkingHoursEditor";
 import { GoogleCalendarSetup } from "@/components/GoogleCalendarSetup";
+import BrandingManagement from "@/components/admin/BrandingManagement";
 import { OAuthSettings } from "@/components/OAuthSettings";
 import { AppointmentCalendar } from "@/components/AppointmentCalendar";
 import { MessageComposer } from "@/components/admin/MessageComposer";
@@ -1338,6 +1339,7 @@ export default function Admin() {
           <TabsTrigger value="calendar" className="data-[state=active]:bg-whiskey data-[state=active]:text-black">Google Calendar</TabsTrigger>
           <TabsTrigger value="oauth" className="data-[state=active]:bg-whiskey data-[state=active]:text-black">OAuth</TabsTrigger>
           <TabsTrigger value="company" className="data-[state=active]:bg-whiskey data-[state=active]:text-black">Εταιρεία</TabsTrigger>
+          <TabsTrigger value="branding" className="data-[state=active]:bg-whiskey data-[state=active]:text-black">Branding</TabsTrigger>
           <TabsTrigger value="notifications" className="data-[state=active]:bg-whiskey data-[state=active]:text-black">Ειδοποιήσεις</TabsTrigger>
           <TabsTrigger value="manual-booking" className="data-[state=active]:bg-whiskey data-[state=active]:text-black">Κράτηση Τηλεφώνου</TabsTrigger>
         </TabsList>
@@ -1879,7 +1881,7 @@ export default function Admin() {
                 
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-whiskey font-semibold text-lg">{companyInfo?.name || "PEQI Haircut Studio"}</h3>
+                    <h3 className="text-whiskey font-semibold text-lg">{companyInfo?.name || "BarberBook"}</h3>
                     <p className="text-gray-400">{companyInfo?.description || "Το καλύτερο κουρείο στην πόλη"}</p>
                   </div>
                   
@@ -1907,6 +1909,10 @@ export default function Admin() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="branding" className="space-y-6">
+          <BrandingManagement />
         </TabsContent>
 
         <TabsContent value="manual-booking" className="space-y-6">

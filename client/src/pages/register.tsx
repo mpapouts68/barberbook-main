@@ -8,9 +8,10 @@ import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { useLanguage } from "@/context/language-context";
-import { brandFullName, brandLogo, brandLogoAlt } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 
 export default function Register() {
+  const { brandFullName, brandLogo, brandLogoAlt } = useBranding();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { isEnglish } = useLanguage();

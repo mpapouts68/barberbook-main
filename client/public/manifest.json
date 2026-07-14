@@ -1,13 +1,13 @@
 {
-  "name": "PEQI - Haircut Studio",
-  "short_name": "PEQI",
-  "description": "Book your haircut appointment at PEQI Haircut Studio with easy online scheduling and a clean modern experience.",
-  "start_url": "/",
+  "name": "BarberBook — Book Your Cut",
+  "short_name": "BarberBook",
+  "description": "Book your haircut appointment online with easy scheduling and a clean modern experience.",
+  "theme_color": "#0a0a0a",
+  "background_color": "#0a0a0a",
   "display": "standalone",
-  "background_color": "#050505",
-  "theme_color": "#000000",
   "orientation": "portrait-primary",
   "scope": "/",
+  "start_url": "/",
   "icons": [
     {
       "src": "/icons/favicon-96x96.png",
@@ -26,41 +26,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    },
-    {
-      "src": "/icons/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png",
-      "purpose": "any"
-    }
-  ],
-  "categories": ["business", "lifestyle"],
-  "screenshots": [],
-  "shortcuts": [
-    {
-      "name": "Κλείστε Ραντεβού",
-      "short_name": "Ραντεβού",
-      "description": "Κλείστε ένα νέο ραντεβού",
-      "url": "/booking",
-      "icons": [
-        {
-          "src": "/icons/web-app-manifest-192x192.png",
-          "sizes": "192x192"
-        }
-      ]
-    },
-    {
-      "name": "Ραντεβού Μου",
-      "short_name": "Ραντεβού",
-      "description": "Δείτε τα ραντεβού σας",
-      "url": "/appointments",
-      "icons": [
-        {
-          "src": "/icons/web-app-manifest-192x192.png",
-          "sizes": "192x192"
-        }
-      ]
     }
   ]
 }
-

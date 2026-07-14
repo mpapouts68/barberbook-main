@@ -47,7 +47,7 @@ function isGmailApiConfigured() {
 }
 
 function encodeRawMessage(from, toAddr, subject, html, text) {
-  const boundary = `peqi_${Date.now()}`;
+  const boundary = `mail_${Date.now()}`;
   const plain = text || html.replace(/<[^>]+>/g, " ");
   const lines = [
     `From: ${from}`,
@@ -89,11 +89,11 @@ async function sendViaGmailApi() {
   const { google } = require("googleapis");
   const from =
     process.env.EMAIL_FROM ||
-    `PEQI <${process.env.EMAIL_USER || "peqihaircutstudio@gmail.com"}>`;
-  const subject = "PEQI – test email (Gmail API)";
+    `BarberBook <${process.env.EMAIL_USER || "noreply@localhost"}>`;
+  const subject = "BarberBook – test email (Gmail API)";
   const html =
-    "<p>If you received this, <strong>Gmail API over HTTPS</strong> works on PEQI VPS.</p>";
-  const text = "If you received this, Gmail API over HTTPS works on PEQI VPS.";
+    "<p>If you received this, <strong>Gmail API over HTTPS</strong> works on your VPS.</p>";
+  const text = "If you received this, Gmail API over HTTPS works on your VPS.";
 
   console.log("Mode: Gmail API (HTTPS port 443)");
   console.log(`From: ${from}`);
@@ -162,9 +162,9 @@ async function sendViaSmtp() {
     transporter.sendMail({
       from,
       to,
-      subject: "PEQI – test email",
+      subject: "BarberBook – test email",
       text: "If you received this, Gmail SMTP works on the server.",
-      html: "<p>If you received this, <strong>Gmail SMTP</strong> works on PEQI VPS.</p>",
+      html: "<p>If you received this, <strong>Gmail SMTP</strong> works on your VPS.</p>",
     }),
     "sendMail",
   );

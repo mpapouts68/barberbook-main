@@ -30,7 +30,7 @@ function encodeRawMessage(
   html: string,
   text?: string,
 ): string {
-  const boundary = `peqi_${Date.now()}`;
+  const boundary = `mail_${Date.now()}`;
   const plain = text || html.replace(/<[^>]+>/g, " ");
   const lines = [
     `From: ${from}`,
@@ -63,7 +63,7 @@ export async function sendViaGmailApi(mail: OutboundMail): Promise<string> {
   const from =
     mail.from ||
     process.env.EMAIL_FROM ||
-    `PEQI <${process.env.EMAIL_USER || "peqihaircutstudio@gmail.com"}>`;
+    `BarberBook <${process.env.EMAIL_USER || "noreply@localhost"}>`;
 
   const oauth2 = new google.auth.OAuth2(clientId, clientSecret);
   oauth2.setCredentials({ refresh_token: refreshToken });

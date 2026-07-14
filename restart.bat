@@ -8,6 +8,8 @@ echo ========================================
 echo      BarberBook - RESTART MENU
 echo ========================================
 echo.
+echo  Tip: For normal use, run start-app.bat instead.
+echo.
 echo Choose restart option:
 echo.
 echo  1. Quick Restart (fastest)

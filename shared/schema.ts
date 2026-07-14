@@ -172,6 +172,35 @@ export const shopPhotos = sqliteTable("shop_photos", {
   createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()),
 });
 
+export const shopBranding = sqliteTable("shop_branding", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  businessName: text("business_name").notNull().default("BarberBook"),
+  businessNameEn: text("business_name_en"),
+  tagline: text("tagline").notNull().default("Book Your Cut"),
+  taglineEn: text("tagline_en"),
+  logoUrl: text("logo_url"),
+  logoLandscapeUrl: text("logo_landscape_url"),
+  primaryColor: text("primary_color").notNull().default("#C62828"),
+  primaryForegroundColor: text("primary_foreground_color").notNull().default("#000000"),
+  secondaryColor: text("secondary_color").notNull().default("#1A237E"),
+  accentColor: text("accent_color").notNull().default("#1565C0"),
+  backgroundColor: text("background_color").notNull().default("#0a0a0a"),
+  cardColor: text("card_color").notNull().default("#121212"),
+  surfaceColor: text("surface_color").notNull().default("#1c1c1c"),
+  borderColor: text("border_color").notNull().default("#333333"),
+  inputBackgroundColor: text("input_background_color").notNull().default("#0d0d0d"),
+  textPrimaryColor: text("text_primary_color").notNull().default("#fafafa"),
+  textMutedColor: text("text_muted_color").notNull().default("#a3a3a3"),
+  textSubtleColor: text("text_subtle_color").notNull().default("#737373"),
+  textHighlightColor: text("text_highlight_color").notNull().default("#FFFFFF"),
+  destructiveColor: text("destructive_color").notNull().default("#ef4444"),
+  successColor: text("success_color").notNull().default("#22c55e"),
+  warningColor: text("warning_color").notNull().default("#eab308"),
+  overlayColor: text("overlay_color").notNull().default("rgba(0,0,0,0.82)"),
+  landingImages: text("landing_images").notNull().default("{}"),
+  updatedAt: integer("updated_at", { mode: 'timestamp' }).$defaultFn(() => new Date()),
+});
+
 export const services = sqliteTable("services", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
@@ -257,6 +286,13 @@ export const insertShopPhotoSchema = createInsertSchema(shopPhotos).omit({
   createdAt: true,
 });
 
+export const insertShopBrandingSchema = createInsertSchema(shopBranding).omit({
+  id: true,
+  updatedAt: true,
+}).extend({
+  landingImages: z.union([z.string(), z.record(z.string().nullable())]).optional(),
+});
+
 export const insertServiceSchema = createInsertSchema(services).omit({
   id: true,
   createdAt: true,
@@ -295,6 +331,8 @@ export type OAuthConfig = typeof oauthConfig.$inferSelect;
 export type InsertOAuthConfig = z.infer<typeof insertOAuthConfigSchema>;
 export type ShopPhoto = typeof shopPhotos.$inferSelect;
 export type InsertShopPhoto = z.infer<typeof insertShopPhotoSchema>;
+export type ShopBranding = typeof shopBranding.$inferSelect;
+export type InsertShopBranding = z.infer<typeof insertShopBrandingSchema>;
 export type Service = typeof services.$inferSelect;
 export type InsertService = z.infer<typeof insertServiceSchema>;
 export type Notification = typeof notifications.$inferSelect;

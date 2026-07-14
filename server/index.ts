@@ -107,7 +107,7 @@ app.use((req, res, next) => {
   server.listen(port, () => {
     log(`serving on port ${port}`);
     if (isGmailApiConfigured()) {
-      log("email: Gmail API configured (HTTPS — works when VPS blocks SMTP)");
+      log("email: Gmail API configured (HTTPS)");
     } else if (isEmailConfigured()) {
       log("email: SMTP configured (confirmation emails enabled)");
     } else {

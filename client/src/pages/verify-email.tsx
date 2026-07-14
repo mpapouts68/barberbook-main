@@ -5,9 +5,10 @@ import { useEffect, useState } from "react";
 import { useRoute, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/context/language-context";
-import { brandLogo, brandLogoAlt } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 
 export default function VerifyEmail() {
+  const { brandLogo, brandLogoAlt } = useBranding();
   const [, params] = useRoute("/verify-email/:token");
   const [, setLocation] = useLocation();
   const { toast } = useToast();

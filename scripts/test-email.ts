@@ -65,9 +65,9 @@ async function main() {
     transporter.sendMail({
       from,
       to,
-      subject: "PEQI – test email",
+      subject: "BarberBook – test email",
       text: "If you received this, Gmail SMTP is configured correctly.",
-      html: "<p>If you received this, <strong>Gmail SMTP</strong> is configured correctly for PEQI.</p>",
+      html: "<p>If you received this, <strong>Gmail SMTP</strong> is configured correctly.</p>",
     }),
     "sendMail",
   );

@@ -1,7 +1,8 @@
 import { db } from "./db";
-import { users, appointments, namedays, pushMessages, settings, employees, companyInfo, shopConfig, googleCalendarConfig, oauthConfig, services, shopPhotos, fcmTokens, notifications } from "@shared/schema";
+import { users, appointments, namedays, pushMessages, settings, employees, companyInfo, shopConfig, googleCalendarConfig, oauthConfig, services, shopPhotos, shopBranding, fcmTokens, notifications } from "@shared/schema";
 import { eq, and, desc, or, inArray, asc } from "drizzle-orm";
-import type { User, InsertUser, Appointment, InsertAppointment, Nameday, PushMessage, InsertPushMessage, Setting, Employee, InsertEmployee, CompanyInfo, InsertCompanyInfo, GoogleCalendarConfig, InsertGoogleCalendarConfig, OAuthConfig, InsertOAuthConfig, Service, InsertService, ShopPhoto, InsertShopPhoto, FcmToken, InsertFcmToken, Notification, InsertNotification } from "@shared/schema";
+import type { User, InsertUser, Appointment, InsertAppointment, Nameday, PushMessage, InsertPushMessage, Setting, Employee, InsertEmployee, CompanyInfo, InsertCompanyInfo, GoogleCalendarConfig, InsertGoogleCalendarConfig, OAuthConfig, InsertOAuthConfig, Service, InsertService, ShopPhoto, InsertShopPhoto, ShopBranding, InsertShopBranding, FcmToken, InsertFcmToken, Notification, InsertNotification } from "@shared/schema";
+import { mergeBranding, parseLandingImages, type BrandingSettings } from "@shared/brandingDefaults";
 
 export interface IStorage {
   // User operations
@@ -88,6 +89,11 @@ export interface IStorage {
   createShopPhoto(photo: InsertShopPhoto): Promise<ShopPhoto>;
   getShopPhoto(id: string): Promise<ShopPhoto | undefined>;
   deleteShopPhoto(id: string): Promise<void>;
+
+  // Branding
+  getShopBrandingRow(): Promise<ShopBranding | undefined>;
+  getBrandingSettings(): Promise<BrandingSettings>;
+  updateShopBranding(data: Partial<InsertShopBranding>): Promise<BrandingSettings>;
 
   // FCM Token operations
   saveFcmToken(userId: string, token: string, deviceInfo?: string): Promise<FcmToken>;
@@ -548,6 +554,77 @@ export class DatabaseStorage implements IStorage {
 
   async deleteShopPhoto(id: string): Promise<void> {
     await db.delete(shopPhotos).where(eq(shopPhotos.id, id));
+  }
+
+  async getShopBrandingRow(): Promise<ShopBranding | undefined> {
+    const [row] = await db.select().from(shopBranding).limit(1);
+    return row || undefined;
+  }
+
+  private rowToBrandingSettings(row: ShopBranding): BrandingSettings {
+    return mergeBranding({
+      businessName: row.businessName,
+      businessNameEn: row.businessNameEn,
+      tagline: row.tagline,
+      taglineEn: row.taglineEn,
+      logoUrl: row.logoUrl,
+      logoLandscapeUrl: row.logoLandscapeUrl,
+      primaryColor: row.primaryColor,
+      primaryForegroundColor: row.primaryForegroundColor,
+      secondaryColor: row.secondaryColor,
+      accentColor: row.accentColor,
+      backgroundColor: row.backgroundColor,
+      cardColor: row.cardColor,
+      surfaceColor: row.surfaceColor,
+      borderColor: row.borderColor,
+      inputBackgroundColor: row.inputBackgroundColor,
+      textPrimaryColor: row.textPrimaryColor,
+      textMutedColor: row.textMutedColor,
+      textSubtleColor: row.textSubtleColor,
+      textHighlightColor: row.textHighlightColor,
+      destructiveColor: row.destructiveColor,
+      successColor: row.successColor,
+      warningColor: row.warningColor,
+      overlayColor: row.overlayColor,
+      landingImages: parseLandingImages(row.landingImages),
+    });
+  }
+
+  async getBrandingSettings(): Promise<BrandingSettings> {
+    const row = await this.getShopBrandingRow();
+    if (!row) {
+      return mergeBranding(null);
+    }
+    return this.rowToBrandingSettings(row);
+  }
+
+  async updateShopBranding(data: Partial<InsertShopBranding>): Promise<BrandingSettings> {
+    const existing = await this.getShopBrandingRow();
+
+    const { landingImages: landingInput, ...rest } = data;
+    const payload: Partial<ShopBranding> = {
+      ...rest,
+      updatedAt: new Date(),
+    };
+
+    if (landingInput !== undefined) {
+      payload.landingImages =
+        typeof landingInput === "string"
+          ? landingInput
+          : JSON.stringify(landingInput);
+    }
+
+    if (existing) {
+      const [result] = await db
+        .update(shopBranding)
+        .set(payload)
+        .where(eq(shopBranding.id, existing.id))
+        .returning();
+      return this.rowToBrandingSettings(result);
+    }
+
+    const [result] = await db.insert(shopBranding).values(payload).returning();
+    return this.rowToBrandingSettings(result);
   }
 
   // FCM Token operations

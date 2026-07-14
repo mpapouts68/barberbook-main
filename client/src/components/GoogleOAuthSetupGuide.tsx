@@ -3,7 +3,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Copy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { brandFullName } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
+import { getBrandingFullName } from "@shared/brandingDefaults";
 
 const linkClass = "text-blue-600 underline font-semibold";
 
@@ -21,6 +22,8 @@ export function GoogleOAuthSetupGuide({
   devOrigin = "http://localhost:5100",
 }: GoogleOAuthSetupGuideProps) {
   const { toast } = useToast();
+  const { branding } = useBranding();
+  const brandFullName = getBrandingFullName(branding, language === "en");
   const redirectUri = `${baseUrl.replace(/\/$/, "")}/api/auth/google/callback`;
   const isEl = language === "el";
 
@@ -73,7 +76,7 @@ export function GoogleOAuthSetupGuide({
               Google Cloud Console
             </a>
           </li>
-          <li>{isEl ? "Νέο project π.χ. peqi-oauth ή χρήση υπάρχοντος" : "New project e.g. peqi-oauth or use existing"}</li>
+          <li>{isEl ? "Νέο project π.χ. barberbook-oauth ή χρήση υπάρχοντος" : "New project e.g. barberbook-oauth or use existing"}</li>
         </ol>
       </GuideStep>
 
@@ -175,10 +178,10 @@ export function GoogleOAuthSetupGuide({
       <Alert>
         <CheckCircle className="h-4 w-4" />
         <AlertDescription className="text-sm">
-          {isEl ? "Production (peqi.hair): HTTPS, " : "Production (peqi.hair): HTTPS, "}
-          <code className="text-xs">https://peqi.hair</code>
+          {isEl ? "Production: HTTPS, " : "Production: HTTPS, "}
+          <code className="text-xs">https://your-domain.com</code>
           {isEl ? " στα origins + " : " in origins + "}
-          <code className="text-xs">https://peqi.hair/api/auth/google/callback</code>
+          <code className="text-xs">https://your-domain.com/api/auth/google/callback</code>
         </AlertDescription>
       </Alert>
 

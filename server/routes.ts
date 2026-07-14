@@ -24,7 +24,8 @@ import { hashPassword, generateVerificationToken, generateResetToken, sanitizeUs
 import { sendVerificationEmail, sendPasswordResetEmail, sendWelcomeEmail, sendAppointmentConfirmationEmail, sendAppointmentCancellationEmail } from "./services/email";
 import { validateRegistration, validateLogin, validateForgotPassword, validatePasswordReset, validateRoleUpdate } from "./middleware/validation";
 import { loginLimiter, registrationLimiter, passwordResetLimiter, verificationLimiter } from "./middleware/rateLimiter";
-import { insertAppointmentSchema, insertPushMessageSchema, insertEmployeeSchema, insertCompanyInfoSchema, insertGoogleCalendarConfigSchema, insertOAuthConfigSchema, insertNotificationSchema } from "@shared/schema";
+import { insertAppointmentSchema, insertPushMessageSchema, insertEmployeeSchema, insertCompanyInfoSchema, insertGoogleCalendarConfigSchema, insertOAuthConfigSchema, insertNotificationSchema, insertShopBrandingSchema } from "@shared/schema";
+import { LANDING_SLOTS, type LandingSlotKey } from "@shared/brandingDefaults";
 import { isPlaceholderEmail } from "./utils";
 import {
   appointmentMatchesGoogleEvent,
@@ -194,10 +195,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     fileFilter: imageFileFilter,
   });
 
+  const brandingStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(process.cwd(), "public", "uploads", "branding");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, `brand-${uniqueSuffix}${path.extname(file.originalname)}`);
+    },
+  });
+
+  const uploadBranding = multer({
+    storage: brandingStorage,
+    limits: { fileSize: 8 * 1024 * 1024 },
+    fileFilter: imageFileFilter,
+  });
+
+  const VALID_LANDING_SLOTS = new Set(LANDING_SLOTS.map((s) => s.key));
+
   // Ensure upload directories exist before serving static files
   const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
   const avatarsDir = path.join(uploadsDir, 'avatars');
   const shopDir = path.join(uploadsDir, 'shop');
+  const brandingDir = path.join(uploadsDir, 'branding');
   
   if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
@@ -210,6 +234,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   if (!fs.existsSync(shopDir)) {
     fs.mkdirSync(shopDir, { recursive: true });
     console.log(`✅ Created shop gallery directory: ${shopDir}`);
+  }
+  if (!fs.existsSync(brandingDir)) {
+    fs.mkdirSync(brandingDir, { recursive: true });
+    console.log(`✅ Created branding uploads directory: ${brandingDir}`);
   }
   
   // Serve static files from public directory
@@ -2014,6 +2042,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error updating company info:", error);
       res.status(400).json({ message: error.message || "Failed to update company info" });
+    }
+  });
+
+  // Branding (white-label)
+  app.get("/api/branding", async (_req, res) => {
+    try {
+      const branding = await storage.getBrandingSettings();
+      res.json(branding);
+    } catch (error) {
+      console.error("Error fetching branding:", error);
+      res.status(500).json({ message: "Failed to fetch branding" });
+    }
+  });
+
+  app.put("/api/admin/branding", requireAdmin, async (req, res) => {
+    try {
+      const validated = insertShopBrandingSchema.parse(req.body);
+      const branding = await storage.updateShopBranding(validated);
+      res.json(branding);
+    } catch (error: unknown) {
+      console.error("Error updating branding:", error);
+      const message = error instanceof Error ? error.message : "Failed to update branding";
+      res.status(400).json({ message });
+    }
+  });
+
+  app.post("/api/admin/branding/logo", requireAdmin, uploadBranding.single("logo"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No image uploaded" });
+      }
+
+      const variant = req.body.variant === "landscape" ? "landscape" : "round";
+      const url = `/uploads/branding/${req.file.filename}`;
+      const patch =
+        variant === "landscape"
+          ? { logoLandscapeUrl: url }
+          : { logoUrl: url };
+
+      const branding = await storage.updateShopBranding(patch);
+      res.json(branding);
+    } catch (error: unknown) {
+      console.error("Error uploading branding logo:", error);
+      const message = error instanceof Error ? error.message : "Failed to upload logo";
+      res.status(500).json({ message });
+    }
+  });
+
+  app.post("/api/admin/branding/landing/:slot", requireAdmin, uploadBranding.single("image"), async (req, res) => {
+    try {
+      const slot = req.params.slot as LandingSlotKey;
+      if (!VALID_LANDING_SLOTS.has(slot)) {
+        return res.status(400).json({ message: "Invalid landing image slot" });
+      }
+      if (!req.file) {
+        return res.status(400).json({ message: "No image uploaded" });
+      }
+
+      const url = `/uploads/branding/${req.file.filename}`;
+      const current = await storage.getBrandingSettings();
+      const landingImages = {
+        ...current.landingImages,
+        [slot]: url,
+      };
+
+      const branding = await storage.updateShopBranding({ landingImages });
+      res.json(branding);
+    } catch (error: unknown) {
+      console.error("Error uploading landing image:", error);
+      const message = error instanceof Error ? error.message : "Failed to upload landing image";
+      res.status(500).json({ message });
+    }
+  });
+
+  app.delete("/api/admin/branding/landing/:slot", requireAdmin, async (req, res) => {
+    try {
+      const slot = req.params.slot as LandingSlotKey;
+      if (!VALID_LANDING_SLOTS.has(slot)) {
+        return res.status(400).json({ message: "Invalid landing image slot" });
+      }
+
+      const current = await storage.getBrandingSettings();
+      const landingImages = { ...current.landingImages, [slot]: null };
+      const branding = await storage.updateShopBranding({ landingImages });
+      res.json(branding);
+    } catch (error: unknown) {
+      console.error("Error clearing landing image:", error);
+      const message = error instanceof Error ? error.message : "Failed to clear landing image";
+      res.status(500).json({ message });
     }
   });
 

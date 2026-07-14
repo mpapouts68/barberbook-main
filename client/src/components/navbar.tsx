@@ -12,9 +12,10 @@ import {
 } from "@/components/ui/sheet";
 import LanguageSwitcher from "@/components/language-switcher";
 import { useLanguage } from "@/context/language-context";
-import { brandLogoAlt, brandLogoLandscape } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 
 export default function Navbar() {
+  const { brandLogoLandscape, brandLogoAlt } = useBranding();
   const { user, logout } = useAuth();
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -29,7 +30,7 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="glass-effect border-b border-steel sticky top-0 z-40">
+    <nav className="brand-header sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link href="/dashboard" className="flex items-center">
@@ -45,7 +46,7 @@ export default function Navbar() {
               <Button
                 variant="ghost"
                 className={`text-gray-300 hover:text-whiskey transition-colors ${
-                  location === "/dashboard" ? "text-whiskey" : ""
+                  location === "/dashboard" ? "text-brand-accent font-medium" : ""
                 }`}
               >
                 {text.home}
@@ -55,7 +56,7 @@ export default function Navbar() {
               <Button
                 variant="ghost"
                 className={`text-gray-300 hover:text-whiskey transition-colors ${
-                  location === "/appointments" ? "text-whiskey" : ""
+                  location === "/appointments" ? "text-brand-accent font-medium" : ""
                 }`}
               >
                 {text.appointments}
@@ -65,7 +66,7 @@ export default function Navbar() {
               <Button
                 variant="ghost"
                 className={`text-gray-300 hover:text-whiskey transition-colors ${
-                  location === "/booking" ? "text-whiskey" : ""
+                  location === "/booking" ? "text-brand-accent font-medium" : ""
                 }`}
               >
                 {text.booking}
@@ -76,7 +77,7 @@ export default function Navbar() {
                 <Button
                   variant="ghost"
                   className={`text-gray-300 hover:text-whiskey transition-colors ${
-                    location === "/admin" ? "text-whiskey" : ""
+                    location === "/admin" ? "text-brand-accent font-medium" : ""
                   }`}
                 >
                   <Shield className="w-4 h-4 mr-1" />
@@ -92,7 +93,7 @@ export default function Navbar() {
                 <Button
                   variant="ghost"
                   className={`text-gray-300 hover:text-whiskey transition-colors ${
-                    location === "/profile" ? "text-whiskey" : ""
+                    location === "/profile" ? "text-brand-accent font-medium" : ""
                   }`}
                 >
                   {user?.firstName || text.userFallback}
@@ -142,7 +143,7 @@ export default function Navbar() {
               <Button
                 variant="ghost"
                 className={`w-full justify-start text-gray-300 hover:text-whiskey transition-colors ${
-                  location === "/dashboard" ? "text-whiskey" : ""
+                  location === "/dashboard" ? "text-brand-accent font-medium" : ""
                 }`}
               >
                 {text.home}
@@ -152,7 +153,7 @@ export default function Navbar() {
               <Button
                 variant="ghost"
                 className={`w-full justify-start text-gray-300 hover:text-whiskey transition-colors ${
-                  location === "/appointments" ? "text-whiskey" : ""
+                  location === "/appointments" ? "text-brand-accent font-medium" : ""
                 }`}
               >
                 {text.appointments}
@@ -162,7 +163,7 @@ export default function Navbar() {
               <Button
                 variant="ghost"
                 className={`w-full justify-start text-gray-300 hover:text-whiskey transition-colors ${
-                  location === "/booking" ? "text-whiskey" : ""
+                  location === "/booking" ? "text-brand-accent font-medium" : ""
                 }`}
               >
                 {text.booking}
@@ -173,7 +174,7 @@ export default function Navbar() {
                 <Button
                   variant="ghost"
                   className={`w-full justify-start text-gray-300 hover:text-whiskey transition-colors ${
-                    location === "/admin" ? "text-whiskey" : ""
+                    location === "/admin" ? "text-brand-accent font-medium" : ""
                   }`}
                 >
                   <Shield className="w-4 h-4 mr-2" />
@@ -187,7 +188,7 @@ export default function Navbar() {
                 <Button
                   variant="ghost"
                   className={`w-full justify-start text-gray-300 hover:text-whiskey transition-colors ${
-                    location === "/profile" ? "text-whiskey" : ""
+                    location === "/profile" ? "text-brand-accent font-medium" : ""
                   }`}
                 >
                   {user?.firstName || text.userFallback}

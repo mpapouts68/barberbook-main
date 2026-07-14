@@ -64,7 +64,7 @@ export async function initializeDatabase() {
     if (msg.includes("no such table")) {
       console.error(
         "❌ Database tables missing. On the server run:\n" +
-          "   cd /var/www/peqi && npm run db:push && pm2 restart peqi\n" +
+          "   cd /var/www/barberbook && npm run fix-schema && pm2 restart barberbook\n" +
           "   Or: bash deploy/vps-fix-502.sh",
       );
     }

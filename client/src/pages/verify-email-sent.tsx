@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Mail, ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
 import { useLanguage } from "@/context/language-context";
-import { brandLogo, brandLogoAlt } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 
 export default function VerifyEmailSent() {
+  const { brandLogo, brandLogoAlt } = useBranding();
   const { isEnglish } = useLanguage();
 
   const instructions = isEnglish

@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import SocialContactBadges from "@/components/SocialContactBadges";
-import { brandLogo, brandLogoAlt, brandName, brandTagline } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 
 interface SplashScreenProps {
   onComplete: () => void;
 }
 
 export default function SplashScreen({ onComplete }: SplashScreenProps) {
+  const { brandLogo, brandLogoAlt, brandName, brandTagline } = useBranding();
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {

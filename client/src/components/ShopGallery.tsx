@@ -8,9 +8,11 @@ import { useToast } from "@/hooks/use-toast";
 import { api } from "@/services/api";
 import { ImagePlus, Loader2, Store, Trash2, X } from "lucide-react";
 import type { ShopPhoto } from "@shared/schema";
-import shopBgImg from "@assets/shop.jpg";
+import { useBranding } from "@/context/branding-context";
 
 export default function ShopGallery() {
+  const { landingImage, brandName } = useBranding();
+  const shopBgImg = landingImage("shopGallery");
   const { user } = useAuth();
   const { isEnglish } = useLanguage();
   const { toast } = useToast();
@@ -23,7 +25,7 @@ export default function ShopGallery() {
   const text = {
     title: isEnglish ? "OUR SHOP" : "ΤΟ ΚΟΜΜΩΤΗΡΙΟ ΜΑΣ",
     subtitle: isEnglish
-      ? "Take a look inside PEQI Haircut Studio"
+      ? `Take a look inside ${brandName}`
       : "Ρίξτε μια ματιά στο χώρο μας",
     empty: isEnglish ? "No photos yet" : "Δεν υπάρχουν φωτογραφίες ακόμα",
     emptyAdmin: isEnglish
@@ -154,7 +156,7 @@ export default function ShopGallery() {
                     >
                       <img
                         src={photo.url}
-                        alt={photo.caption || "PEQI shop"}
+                        alt={photo.caption || `${brandName} shop`}
                         className="w-full h-full object-cover transition-transform group-hover:scale-105"
                         loading="lazy"
                       />

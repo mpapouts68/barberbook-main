@@ -9,11 +9,12 @@ import { useLocation, Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
 import { useLanguage } from "@/context/language-context";
-import { brandFullName, brandLogo, brandLogoAlt } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 import { GUEST_BOOKING_LANGUAGE_KEY } from "@/context/language-context";
 import SocialContactBadges from "@/components/SocialContactBadges";
 
 export default function Login() {
+  const { brandFullName, brandLogo, brandLogoAlt } = useBranding();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { isEnglish } = useLanguage();

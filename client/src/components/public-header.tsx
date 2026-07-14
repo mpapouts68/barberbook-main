@@ -1,10 +1,11 @@
 import { Link } from "wouter";
 import LanguageSwitcher from "@/components/language-switcher";
-import { brandLogoAlt, brandLogoLandscape } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 
 export default function PublicHeader() {
+  const { brandLogoLandscape, brandLogoAlt } = useBranding();
   return (
-    <nav className="glass-effect border-b border-steel">
+    <nav className="brand-header">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Link href="/" className="flex items-center">

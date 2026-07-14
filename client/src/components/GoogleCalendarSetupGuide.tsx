@@ -23,7 +23,7 @@ export function GoogleCalendarSetupGuide() {
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription className="space-y-2">
           <p>
-            <strong>Πώς λειτουργεί το PEQI:</strong> Service Account + διαμοιρασμός ημερολογίου ανά
+            <strong>Πώς λειτουργεί το BarberBook:</strong> Service Account + διαμοιρασμός ημερολογίου ανά
             υπάλληλο. Δεν γίνεται σύνδεση OAuth με προσωπικό Gmail.
           </p>
           <p>
@@ -45,7 +45,7 @@ export function GoogleCalendarSetupGuide() {
             </a>
           </li>
           <li>
-            Επιλέξτε υπάρχον project ή <strong>Select a project → New Project</strong> (π.χ. «peqi-calendar»)
+            Επιλέξτε υπάρχον project ή <strong>Select a project → New Project</strong> (π.χ. «barberbook-calendar»)
           </li>
           <li>Σημειώστε το <strong>Project ID</strong> — θα το χρειαστείτε στη φόρμα</li>
         </ol>
@@ -89,7 +89,7 @@ export function GoogleCalendarSetupGuide() {
             </a>
           </li>
           <li>
-            <strong>Create service account</strong> → όνομα π.χ. <code className="text-xs">peqi-calendar</code>
+            <strong>Create service account</strong> → όνομα π.χ. <code className="text-xs">barberbook-calendar</code>
           </li>
           <li>
             <strong>Create and continue</strong> — στο βήμα ρόλων <em>δεν</em> χρειάζονται IAM roles για
@@ -148,7 +148,7 @@ export function GoogleCalendarSetupGuide() {
             <strong>Integrate calendar</strong> → αντιγράψτε το <strong>Calendar ID</strong>
           </li>
           <li>
-            Στο PEQI: <strong>Διαχείριση → Υπάλληλοι</strong> → επεξεργασία → Google Calendar ID + ενεργοποίηση
+            Στο BarberBook: <strong>Διαχείριση → Υπάλληλοι</strong> → επεξεργασία → Google Calendar ID + ενεργοποίηση
           </li>
         </ol>
       </section>

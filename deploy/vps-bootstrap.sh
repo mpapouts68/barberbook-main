@@ -1,15 +1,21 @@
 #!/bin/bash
-# PEQI / BarberBook — first-time VPS setup (Ubuntu/Debian)
+# BarberBook — first-time VPS setup (Ubuntu/Debian)
 # Run on server as root: bash vps-bootstrap.sh your-domain.com
 
 set -euo pipefail
 
-DOMAIN="${1:-peqi.hair}"
-APP_DIR="/var/www/peqi"
+DOMAIN="${1:-}"
+if [[ -z "$DOMAIN" ]]; then
+  echo "Usage: bash deploy/vps-bootstrap.sh your-domain.com"
+  exit 1
+fi
+
+APP_DIR="/var/www/barberbook"
 APP_PORT="5100"
 NODE_MAJOR="20"
+NGINX_SITE="barberbook"
 
-echo "==> PEQI VPS bootstrap — domain: $DOMAIN"
+echo "==> BarberBook VPS bootstrap — domain: $DOMAIN"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
@@ -34,7 +40,7 @@ mkdir -p "$APP_DIR"
 chown -R "${SUDO_USER:-root}:${SUDO_USER:-root}" "$APP_DIR"
 
 # Nginx reverse proxy → app on localhost:5100
-cat > "/etc/nginx/sites-available/peqi" <<NGINX
+cat > "/etc/nginx/sites-available/${NGINX_SITE}" <<NGINX
 server {
     listen 80;
     listen [::]:80;
@@ -55,7 +61,7 @@ server {
 }
 NGINX
 
-ln -sf /etc/nginx/sites-available/peqi /etc/nginx/sites-enabled/peqi
+ln -sf "/etc/nginx/sites-available/${NGINX_SITE}" "/etc/nginx/sites-enabled/${NGINX_SITE}"
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 
@@ -64,7 +70,7 @@ echo "✅ Bootstrap done."
 echo "   App directory: $APP_DIR"
 echo "   Next:"
 echo "   1) Upload app + .env to $APP_DIR"
-echo "   2) cd $APP_DIR && npm ci && npm run build"
-echo "   3) pm2 start dist/index.js --name peqi"
+echo "   2) cd $APP_DIR && npm ci --include=dev && npm run build"
+echo "   3) pm2 start deploy/ecosystem.config.cjs"
 echo "   4) pm2 save && pm2 startup"
 echo "   5) certbot --nginx -d $DOMAIN -d www.$DOMAIN"

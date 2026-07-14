@@ -6,56 +6,59 @@
 @tailwind utilities;
 
 :root {
-  --background: hsl(0, 0%, 4%);
-  --foreground: hsl(0, 0%, 98%);
-  --muted: hsl(0, 0%, 8%);
-  --muted-foreground: hsl(0, 0%, 70%);
-  --popover: hsl(0, 0%, 6%);
-  --popover-foreground: hsl(0, 0%, 98%);
-  --card: hsl(0, 0%, 8%);
-  --card-foreground: hsl(0, 0%, 98%);
-  --border: hsl(0, 0%, 22%);
-  --input: hsl(0, 0%, 5%);
-  --primary: hsl(0, 0%, 96%);
-  --primary-foreground: hsl(0, 0%, 0%);
-  --secondary: hsl(0, 0%, 15%);
-  --secondary-foreground: hsl(0, 0%, 98%);
-  --accent: hsl(0, 0%, 15%);
-  --accent-foreground: hsl(0, 0%, 98%);
-  --destructive: hsl(0, 84%, 60%);
-  --destructive-foreground: hsl(0, 0%, 98%);
-  --ring: hsl(0, 0%, 88%);
+  /* shadcn bridge — overridden at runtime by BrandingProvider */
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --muted: #1c1c1c;
+  --muted-foreground: #a3a3a3;
+  --popover: #121212;
+  --popover-foreground: #fafafa;
+  --card: #121212;
+  --card-foreground: #fafafa;
+  --border: #333333;
+  --input: #0d0d0d;
+  --primary: #C62828;
+  --primary-foreground: #000000;
+  --secondary: #1c1c1c;
+  --secondary-foreground: #fafafa;
+  --accent: #1565C0;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --destructive-foreground: #fafafa;
+  --ring: #1565C0;
   --radius: 0.5rem;
-  
-  /* Custom studio colors */
-  --whiskey: hsl(0, 0%, 96%);
-  --bourbon: hsl(0, 0%, 74%);
-  --charcoal: hsl(0, 0%, 4%);
-  --slate: hsl(0, 0%, 7%);
-  --steel: hsl(0, 0%, 16%);
-  --iron: hsl(0, 0%, 28%);
+
+  /* Brand palette */
+  --brand-primary: #C62828;
+  --brand-primary-dark: #8E0000;
+  --brand-primary-foreground: #000000;
+  --brand-secondary: #1A237E;
+  --brand-accent: #1565C0;
+  --header-bg: #1A237E;
+  --header-border: #C62828;
+
+  /* Studio / surface tokens */
+  --whiskey: #ffffff;
+  --bourbon: #a3a3a3;
+  --charcoal: #0a0a0a;
+  --slate: #121212;
+  --steel: #1c1c1c;
+  --iron: #333333;
+
+  /* Semantic text */
+  --text-primary: #fafafa;
+  --text-muted: #a3a3a3;
+  --text-subtle: #737373;
+
+  /* Status */
+  --success: #22c55e;
+  --warning: #eab308;
+  --overlay: rgba(0, 0, 0, 0.82);
 }
 
 .dark {
-  --background: hsl(0, 0%, 4%);
-  --foreground: hsl(0, 0%, 98%);
-  --muted: hsl(0, 0%, 8%);
-  --muted-foreground: hsl(0, 0%, 70%);
-  --popover: hsl(0, 0%, 6%);
-  --popover-foreground: hsl(0, 0%, 98%);
-  --card: hsl(0, 0%, 8%);
-  --card-foreground: hsl(0, 0%, 98%);
-  --border: hsl(0, 0%, 22%);
-  --input: hsl(0, 0%, 5%);
-  --primary: hsl(0, 0%, 96%);
-  --primary-foreground: hsl(0, 0%, 0%);
-  --secondary: hsl(0, 0%, 15%);
-  --secondary-foreground: hsl(0, 0%, 98%);
-  --accent: hsl(0, 0%, 15%);
-  --accent-foreground: hsl(0, 0%, 98%);
-  --destructive: hsl(0, 84%, 60%);
-  --destructive-foreground: hsl(0, 0%, 98%);
-  --ring: hsl(0, 0%, 88%);
+  --background: var(--background);
+  --foreground: var(--foreground);
 }
 
 @layer base {
@@ -66,10 +69,18 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', sans-serif;
+    background-color: var(--background);
+    color: var(--foreground);
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Oswald', sans-serif;
+    color: var(--whiskey);
+  }
+
+  ::placeholder {
+    color: var(--text-subtle);
+    opacity: 1;
   }
 }
 
@@ -77,7 +88,7 @@
   .font-oswald {
     font-family: 'Oswald', sans-serif;
   }
-  
+
   .font-inter {
     font-family: 'Inter', sans-serif;
   }
@@ -106,6 +117,38 @@
     background-color: var(--iron);
   }
 
+  .text-brand-body {
+    color: var(--text-primary);
+  }
+
+  .text-brand-muted {
+    color: var(--text-muted);
+  }
+
+  .text-brand-subtle {
+    color: var(--text-subtle);
+  }
+
+  .text-brand-accent {
+    color: var(--brand-accent);
+  }
+
+  .text-brand-primary {
+    color: var(--brand-primary);
+  }
+
+  .text-brand-success {
+    color: var(--success);
+  }
+
+  .text-brand-destructive {
+    color: var(--destructive);
+  }
+
+  .text-brand-warning {
+    color: var(--warning);
+  }
+
   .border-whiskey {
     border-color: var(--whiskey);
   }
@@ -114,17 +157,37 @@
     border-color: var(--steel);
   }
 
+  .border-brand {
+    border-color: var(--iron);
+  }
+
+  .border-brand-primary {
+    border-color: var(--header-border);
+  }
+
   .metal-gradient {
     background: linear-gradient(135deg, var(--steel) 0%, var(--slate) 50%, var(--charcoal) 100%);
   }
 
   .whiskey-gradient {
-    background: linear-gradient(135deg, var(--whiskey) 0%, var(--bourbon) 100%);
+    background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
+    color: var(--brand-primary-foreground) !important;
+  }
+
+  .brand-header {
+    backdrop-filter: blur(12px);
+    background: linear-gradient(
+      135deg,
+      var(--header-bg) 0%,
+      color-mix(in srgb, var(--header-bg) 75%, var(--brand-primary-dark) 25%) 100%
+    );
+    border-bottom: 3px solid var(--header-border);
+    box-shadow: 0 4px 24px color-mix(in srgb, var(--header-bg) 40%, transparent);
   }
 
   .glass-effect {
     backdrop-filter: blur(10px);
-    background: hsla(0, 0%, 3%, 0.88);
+    background: color-mix(in srgb, var(--card) 92%, transparent);
   }
 
   .shine-effect {
@@ -150,9 +213,164 @@
   .bg-leather {
     background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23111111' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   }
+
+  /* Map common Tailwind grays to brand tokens */
+  .text-gray-200 {
+    color: color-mix(in srgb, var(--text-primary) 85%, transparent);
+  }
+
+  .text-gray-300 {
+    color: color-mix(in srgb, var(--text-muted) 90%, var(--text-primary) 10%);
+  }
+
+  .text-gray-400 {
+    color: var(--text-muted);
+  }
+
+  .text-gray-500 {
+    color: var(--text-subtle);
+  }
+
+  .text-gray-600 {
+    color: color-mix(in srgb, var(--text-subtle) 80%, var(--border) 20%);
+  }
+
+  .text-gray-900 {
+    color: var(--text-primary);
+  }
+
+  .bg-gray-50 {
+    background-color: var(--background);
+  }
+
+  /* Status colors → branding tokens */
+  .text-red-300,
+  .text-red-400 {
+    color: color-mix(in srgb, var(--destructive) 75%, var(--text-primary) 25%);
+  }
+
+  .text-red-500,
+  .text-red-600,
+  .text-red-700,
+  .text-red-800 {
+    color: var(--destructive);
+  }
+
+  .bg-red-50,
+  .bg-red-100,
+  .bg-red-950\/50 {
+    background-color: color-mix(in srgb, var(--destructive) 12%, var(--card) 88%);
+  }
+
+  .bg-red-600,
+  .bg-red-700,
+  .bg-red-800,
+  .bg-red-900\/20 {
+    background-color: var(--destructive);
+  }
+
+  .border-red-200,
+  .border-red-600\/30 {
+    border-color: color-mix(in srgb, var(--destructive) 35%, var(--border) 65%);
+  }
+
+  .border-red-600,
+  .border-red-800 {
+    border-color: var(--destructive);
+  }
+
+  .hover\:bg-red-700:hover,
+  .hover\:bg-red-900:hover {
+    background-color: color-mix(in srgb, var(--destructive) 85%, black 15%);
+  }
+
+  .text-green-300,
+  .text-green-400 {
+    color: color-mix(in srgb, var(--success) 75%, var(--text-primary) 25%);
+  }
+
+  .text-green-600,
+  .text-green-700,
+  .text-green-800 {
+    color: var(--success);
+  }
+
+  .bg-green-50,
+  .bg-green-100,
+  .bg-green-900\/20 {
+    background-color: color-mix(in srgb, var(--success) 12%, var(--card) 88%);
+  }
+
+  .bg-green-600,
+  .bg-green-700 {
+    background-color: var(--success);
+  }
+
+  .border-green-200,
+  .border-green-600\/30 {
+    border-color: color-mix(in srgb, var(--success) 35%, var(--border) 65%);
+  }
+
+  .hover\:bg-green-700:hover {
+    background-color: color-mix(in srgb, var(--success) 85%, black 15%);
+  }
+
+  .text-yellow-400,
+  .text-yellow-500 {
+    color: var(--warning);
+  }
+
+  .text-white {
+    color: var(--text-primary);
+  }
+
+  .placeholder-gray-500::placeholder {
+    color: var(--text-subtle);
+  }
+
+  .bg-black\/80 {
+    background-color: var(--overlay) !important;
+  }
+
+  .bg-black\/50 {
+    background-color: color-mix(in srgb, var(--overlay) 65%, transparent) !important;
+  }
+
+  .bg-black\/70 {
+    background-color: color-mix(in srgb, var(--overlay) 80%, transparent) !important;
+  }
+
+  .bg-black\/25 {
+    background-color: color-mix(in srgb, var(--overlay) 35%, transparent) !important;
+  }
+
+  .focus\:border-whiskey:focus {
+    border-color: var(--whiskey);
+  }
+
+  .focus\:bg-steel:focus,
+  .focus\:bg-steel[data-state="checked"] {
+    background-color: var(--steel);
+  }
+
+  .hover\:bg-steel:hover {
+    background-color: var(--steel);
+  }
+
+  .hover\:bg-iron:hover {
+    background-color: var(--iron);
+  }
+
+  .hover\:text-whiskey:hover {
+    color: var(--whiskey);
+  }
+
+  .data-\[state\=active\]\:bg-whiskey[data-state="active"] {
+    background-color: var(--whiskey);
+    color: var(--charcoal);
+  }
 }
 
-/* Custom animations */
 @keyframes pulse-whiskey {
   0%, 100% {
     opacity: 1;

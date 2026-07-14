@@ -28,7 +28,7 @@ function columnExists(table, column) {
     .some((c) => c.name === column);
 }
 
-/** Greek → English labels for PEQI / demo services (always applied on migrate run) */
+/** Greek → English labels for default demo services (always applied on migrate run) */
 const backfill = [
   { name: "Κούρεμα", nameEn: "Haircut", descriptionEn: "Classic haircut" },
   { name: "Πλαινό", nameEn: "Side trim", descriptionEn: "Sides and sideburns trim" },

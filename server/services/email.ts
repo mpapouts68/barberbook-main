@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import type { Transporter } from "nodemailer";
 import { isPlaceholderEmail } from "../utils";
-import { EMAIL_BRAND_FULL } from "./emailBranding";
+import { resolveEmailBranding } from "./emailBranding";
 import { isGmailApiConfigured, sendViaGmailApi } from "./gmailApiMailer";
 
 function getEmailConfig() {
@@ -12,7 +12,7 @@ function getEmailConfig() {
     pass: process.env.EMAIL_PASS || "",
     from:
       process.env.EMAIL_FROM ||
-      "PEQI Haircut Studio <peqihaircutstudio@gmail.com>",
+      "BarberBook <noreply@barberbook.app>",
     baseUrl: process.env.BASE_URL || "http://localhost:5100",
   };
 }
@@ -109,13 +109,14 @@ export async function sendVerificationEmail(
   firstName: string,
   verificationToken: string
 ): Promise<void> {
+  const brand = await resolveEmailBranding();
   const cfg = getEmailConfig();
   const verificationUrl = `${cfg.baseUrl}/verify-email/${verificationToken}`;
 
   const mailOptions = {
     from: cfg.from,
     to: email,
-    subject: "Επιβεβαίωση Email - PEQI Haircut Studio",
+    subject: `Επιβεβαίωση Email - ${brand.full}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -132,11 +133,11 @@ export async function sendVerificationEmail(
         <body>
           <div class="container">
             <div class="header">
-              <h1>✂️ Καλώς Ήρθες στο PEQI!</h1>
+              <h1>✂️ Καλώς Ήρθες στο ${brand.name}!</h1>
             </div>
             <div class="content">
               <h2>Γεια σου ${firstName},</h2>
-              <p>Ευχαριστούμε που εγγράφηκες στο PEQI!</p>
+              <p>Ευχαριστούμε που εγγράφηκες στο ${brand.name}!</p>
               <p>Για να ολοκληρώσεις την εγγραφή σου, παρακαλώ επιβεβαίωσε το email σου κάνοντας κλικ στο παρακάτω κουμπί:</p>
               <div style="text-align: center;">
                 <a href="${verificationUrl}" class="button">Επιβεβαίωση Email</a>
@@ -147,7 +148,7 @@ export async function sendVerificationEmail(
               <p>Αν δεν έκανες εσύ αυτό το αίτημα, παρακαλώ αγνόησε αυτό το email.</p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} PEQI Haircut Studio. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} ${brand.full}. All rights reserved.</p>
               <p>Το καλύτερο κουρείο στην πόλη!</p>
             </div>
           </div>
@@ -155,11 +156,11 @@ export async function sendVerificationEmail(
       </html>
     `,
     text: `
-      Καλώς Ήρθες στο PEQI!
+      Καλώς Ήρθες στο ${brand.name}!
       
       Γεια σου ${firstName},
       
-      Ευχαριστούμε που εγγράφηκες στο PEQI!
+      Ευχαριστούμε που εγγράφηκες στο ${brand.name}!
       
       Για να ολοκληρώσεις την εγγραφή σου, παρακαλώ επιβεβαίωσε το email σου επισκεπτόμενος τον παρακάτω σύνδεσμο:
       
@@ -169,7 +170,7 @@ export async function sendVerificationEmail(
       
       Αν δεν έκανες εσύ αυτό το αίτημα, παρακαλώ αγνόησε αυτό το email.
       
-      PEQI Haircut Studio
+      ${brand.full}
       Το καλύτερο κουρείο στην πόλη!
     `,
   };
@@ -193,12 +194,13 @@ export async function sendPasswordResetEmail(
   firstName: string,
   resetToken: string
 ): Promise<void> {
+  const brand = await resolveEmailBranding();
   const resetUrl = `${getEmailConfig().baseUrl}/reset-password/${resetToken}`;
 
   const mailOptions = {
     from: getEmailConfig().from,
     to: email,
-    subject: "Επαναφορά Κωδικού - PEQI Haircut Studio",
+    subject: `Επαναφορά Κωδικού - ${brand.full}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -237,7 +239,7 @@ export async function sendPasswordResetEmail(
               </div>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} PEQI Haircut Studio. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} ${brand.full}. All rights reserved.</p>
               <p>Για ερωτήσεις ασφαλείας, επικοινώνησε μαζί μας.</p>
             </div>
           </div>
@@ -260,7 +262,7 @@ export async function sendPasswordResetEmail(
       - Μπορεί να χρησιμοποιηθεί μόνο μία φορά
       - Αν δεν έκανες εσύ αυτό το αίτημα, αγνόησε αυτό το email
       
-      PEQI Haircut Studio
+      ${brand.full}
     `,
   };
 
@@ -279,10 +281,11 @@ export async function sendPasswordResetEmail(
  * Send welcome email after successful verification
  */
 export async function sendWelcomeEmail(email: string, firstName: string): Promise<void> {
+  const brand = await resolveEmailBranding();
   const mailOptions = {
     from: getEmailConfig().from,
     to: email,
-    subject: "Καλωσόρισμα στο PEQI! 🎉",
+    subject: `Καλωσόρισμα στο ${brand.name}! 🎉`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -305,7 +308,7 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
             <div class="content">
               <h2>Συγχαρητήρια ${firstName}! 🎉</h2>
               <p>Ο λογαριασμός σου επιβεβαιώθηκε με επιτυχία!</p>
-              <p>Είσαι πλέον μέλος του PEQI και μπορείς να απολαύσεις:</p>
+              <p>Είσαι πλέον μέλος του ${brand.name} και μπορείς να απολαύσεις:</p>
               <div class="features">
                 <ul>
                   <li>✅ Online κλείσιμο ραντεβού 24/7</li>
@@ -321,7 +324,7 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
               <p>Ανυπομονούμε να σε δούμε στο κατάστημά μας!</p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} PEQI Haircut Studio. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} ${brand.full}. All rights reserved.</p>
               <p>Το καλύτερο κουρείο στην πόλη!</p>
             </div>
           </div>
@@ -329,13 +332,13 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
       </html>
     `,
     text: `
-      Καλωσόρισμα στο PEQI!
+      Καλωσόρισμα στο ${brand.name}!
       
       Συγχαρητήρια ${firstName}! 🎉
       
       Ο λογαριασμός σου επιβεβαιώθηκε με επιτυχία!
       
-      Είσαι πλέον μέλος του PEQI και μπορείς να απολαύσεις:
+      Είσαι πλέον μέλος του ${brand.name} και μπορείς να απολαύσεις:
       - Online κλείσιμο ραντεβού 24/7
       - Επιλογή του αγαπημένου σου κομμωτή
       - Διαχείριση των ραντεβού σου
@@ -344,7 +347,7 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
       
       Ανυπομονούμε να σε δούμε στο κατάστημά μας!
       
-      PEQI Haircut Studio
+      ${brand.full}
     `,
   };
 
@@ -370,6 +373,7 @@ export async function sendBroadcastNotificationEmail(
 ): Promise<void> {
   if (!to?.trim() || isPlaceholderEmail(to)) return;
 
+  const brand = await resolveEmailBranding();
   const escapeHtml = (s: string) =>
     s
       .replace(/&/g, "&amp;")
@@ -382,7 +386,7 @@ export async function sendBroadcastNotificationEmail(
   const mailOptions = {
     from: getEmailConfig().from,
     to,
-    subject: `${title} — PEQI`,
+    subject: `${title} — ${brand.name}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -411,7 +415,7 @@ export async function sendBroadcastNotificationEmail(
               </p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} PEQI Haircut Studio. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} ${brand.full}. All rights reserved.</p>
             </div>
           </div>
         </body>
@@ -439,6 +443,7 @@ export async function sendAppointmentConfirmationEmail(
   barberName: string,
   duration?: number
 ): Promise<void> {
+  const brand = await resolveEmailBranding();
   const formattedDate = new Date(`${appointmentDate}T${appointmentTime}`).toLocaleDateString('el-GR', {
     weekday: 'long',
     day: 'numeric',
@@ -451,7 +456,7 @@ export async function sendAppointmentConfirmationEmail(
   const mailOptions = {
     from: getEmailConfig().from,
     to: email,
-    subject: "Επιβεβαίωση Ραντεβού - PEQI",
+    subject: `Επιβεβαίωση Ραντεβού - ${brand.name}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -501,7 +506,7 @@ export async function sendAppointmentConfirmationEmail(
               <p>Αν χρειάζεσαι να αλλάξεις ή να ακυρώσεις το ραντεβού σου, μπορείς να το κάνεις από τον λογαριασμό σου.</p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} PEQI Haircut Studio. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} ${brand.full}. All rights reserved.</p>
               <p>Ανυπομονούμε να σε δούμε!</p>
             </div>
           </div>
@@ -509,7 +514,7 @@ export async function sendAppointmentConfirmationEmail(
       </html>
     `,
     text: `
-      Επιβεβαίωση Ραντεβού - PEQI
+      Επιβεβαίωση Ραντεβού - ${brand.name}
       
       Γεια σου ${firstName}!
       
@@ -525,7 +530,7 @@ export async function sendAppointmentConfirmationEmail(
       
       Αν χρειάζεσαι να αλλάξεις ή να ακυρώσεις το ραντεβού σου, μπορείς να το κάνεις από τον λογαριασμό σου.
       
-      PEQI Haircut Studio
+      ${brand.full}
       Ανυπομονούμε να σε δούμε!
     `,
   };
@@ -552,6 +557,7 @@ export async function sendAppointmentCancellationEmail(
   serviceName: string,
   barberName: string
 ): Promise<void> {
+  const brand = await resolveEmailBranding();
   const formattedDate = new Date(`${appointmentDate}T${appointmentTime}`).toLocaleDateString('el-GR', {
     weekday: 'long',
     day: 'numeric',
@@ -562,7 +568,7 @@ export async function sendAppointmentCancellationEmail(
   const mailOptions = {
     from: getEmailConfig().from,
     to: email,
-    subject: "Ακύρωση Ραντεβού - PEQI",
+    subject: `Ακύρωση Ραντεβού - ${brand.name}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -595,7 +601,7 @@ export async function sendAppointmentCancellationEmail(
               <p>Μπορείς να κάνεις νέα κράτηση ανά πάσα στιγμή από τον λογαριασμό σου ή να επικοινωνήσεις μαζί μας.</p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} PEQI Haircut Studio.</p>
+              <p>&copy; ${new Date().getFullYear()} ${brand.full}.</p>
             </div>
           </div>
         </body>
@@ -608,7 +614,7 @@ export async function sendAppointmentCancellationEmail(
       Ώρα: ${appointmentTime}
       Κομμωτής: ${barberName}
       Υπηρεσία: ${serviceName}
-      PEQI Haircut Studio
+      ${brand.full}
     `,
   };
 
@@ -631,6 +637,7 @@ export async function sendSameDayReminderEmail(
   barberName: string,
   duration?: number
 ): Promise<void> {
+  const brand = await resolveEmailBranding();
   const formattedDate = new Date(`${appointmentDate}T${appointmentTime}`).toLocaleDateString('el-GR', {
     weekday: 'long',
     day: 'numeric',
@@ -643,7 +650,7 @@ export async function sendSameDayReminderEmail(
   const mailOptions = {
     from: getEmailConfig().from,
     to: email,
-    subject: "Υπενθύμιση Ραντεβού - Σήμερα! - PEQI",
+    subject: `Υπενθύμιση Ραντεβού - Σήμερα! - ${brand.name}`,
     html: `
       <!DOCTYPE html>
       <html>
@@ -695,7 +702,7 @@ export async function sendSameDayReminderEmail(
               <p>Αν χρειάζεσαι να ακυρώσεις το ραντεβού σου, παρακαλώ κάνε το το συντομότερο δυνατό.</p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} PEQI Haircut Studio. All rights reserved.</p>
+              <p>&copy; ${new Date().getFullYear()} ${brand.full}. All rights reserved.</p>
               <p>Σε περιμένουμε!</p>
             </div>
           </div>
@@ -703,7 +710,7 @@ export async function sendSameDayReminderEmail(
       </html>
     `,
     text: `
-      Υπενθύμιση Ραντεβού - Σήμερα! - PEQI
+      Υπενθύμιση Ραντεβού - Σήμερα! - ${brand.name}
       
       ΣΗΜΕΡΑ!
       
@@ -721,7 +728,7 @@ export async function sendSameDayReminderEmail(
       
       Αν χρειάζεσαι να ακυρώσεις το ραντεβού σου, παρακαλώ κάνε το το συντομότερο δυνατό.
       
-      PEQI Haircut Studio
+      ${brand.full}
       Σε περιμένουμε!
     `,
   };

@@ -44,6 +44,18 @@ export default {
         border: "var(--border)",
         input: "var(--input)",
         ring: "var(--ring)",
+        charcoal: "var(--charcoal)",
+        slate: "var(--slate)",
+        steel: "var(--steel)",
+        iron: "var(--iron)",
+        whiskey: "var(--whiskey)",
+        bourbon: "var(--bourbon)",
+        brand: {
+          primary: "var(--brand-primary)",
+          accent: "var(--brand-accent)",
+          muted: "var(--text-muted)",
+          subtle: "var(--text-subtle)",
+        },
         chart: {
           "1": "var(--chart-1)",
           "2": "var(--chart-2)",

@@ -11,9 +11,9 @@ export default defineConfig({
       injectRegister: false, // Don't register SW - causes CacheStorage errors, auth issues
       includeAssets: ["favicon.ico", "icons/*.png"],
       manifest: {
-        name: "PEQI - Haircut Studio",
-        short_name: "PEQI",
-        description: "Book your haircut appointment at PEQI Haircut Studio. Choose your service, select your stylist, and manage appointments with ease.",
+        name: "BarberBook — Book Your Cut",
+        short_name: "BarberBook",
+        description: "Book your haircut appointment online. Choose your service, select your stylist, and manage appointments with ease.",
         theme_color: "#000000",
         background_color: "#050505",
         display: "standalone",

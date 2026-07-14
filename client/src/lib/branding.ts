@@ -1,16 +1,39 @@
-import brandLogoRound from "@brand-assets/peqi_logo_round.PNG";
-import brandLogoLandscapeImage from "@brand-assets/PEQI_LOGO_Landscape.png";
+import brandLogoImage from "@assets/barberbook.png";
+import bannerImg from "@assets/BANNER.png";
+import bookAppointmentImg from "@assets/APPOINTMENT2.png";
+import myAppointmentsImg from "@assets/MYAPPOINTMENTS.png";
+import namedayImg from "@assets/EORTOLOGIO.png";
+import profileImg from "@assets/SETTINGS.png";
+import recentActivityImg from "@assets/PROSFATA.png";
+import shopGalleryImg from "@assets/shop.jpg";
+import bookingImg from "@assets/APPOINTMENT.png";
+import {
+  DEFAULT_BRANDING,
+  brandingFullName,
+  type BrandingSettings,
+  type LandingSlotKey,
+} from "@shared/brandingDefaults";
 
-export const brandName = "PEQI";
-export const brandTagline = "Haircut Studio";
-export const brandFullName = `${brandName} ${brandTagline}`;
-export const brandLogo = brandLogoRound;
-export const brandLogoLandscape = brandLogoLandscapeImage;
+export const brandName = DEFAULT_BRANDING.businessName;
+export const brandTagline = DEFAULT_BRANDING.tagline;
+export const brandFullName = brandingFullName(brandName, brandTagline);
+export const brandLogo = brandLogoImage;
+export const brandLogoLandscape = brandLogoImage;
 export const brandLogoAlt = `${brandName} logo`;
 
-export const defaultContactAddress = "Sanoudaki 9, Limenas Chersonisou, Greece";
+export const defaultLandingImages: Record<LandingSlotKey, string> = {
+  banner: bannerImg,
+  bookAppointment: bookAppointmentImg,
+  myAppointments: myAppointmentsImg,
+  nameday: namedayImg,
+  profile: profileImg,
+  recentActivity: recentActivityImg,
+  shopGallery: shopGalleryImg,
+  booking: bookingImg,
+};
 
-const defaultPhones = ["+302897023232", "+306944054270", "+306944959485"];
+export { DEFAULT_BRANDING, brandingFullName };
+export type { BrandingSettings, LandingSlotKey };
 
 function parsePhoneList(raw: string | undefined): string[] {
   if (!raw?.trim()) return [];
@@ -24,28 +47,40 @@ function mapsSearchUrl(address: string) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
-/** Public contact on splash / login — override via VITE_CONTACT_* in .env */
+/** Public contact on splash / login — configure via VITE_CONTACT_* in .env */
 export const contactLinks = {
-  instagram:
-    (import.meta.env.VITE_CONTACT_INSTAGRAM as string | undefined) ||
-    "https://www.instagram.com/peqi_haircut_studio?igsh=MTcwaWV4YjZ0cWNpaw%3D%3D&utm_source=qr",
-  facebook:
-    (import.meta.env.VITE_CONTACT_FACEBOOK as string | undefined) ||
-    "https://www.facebook.com/share/1CqjMj33v4/?mibextid=wwXIfr",
-  email:
-    (import.meta.env.VITE_CONTACT_EMAIL as string | undefined) || "peqibarber@yahoo.com",
+  instagram: (import.meta.env.VITE_CONTACT_INSTAGRAM as string | undefined) || "",
+  facebook: (import.meta.env.VITE_CONTACT_FACEBOOK as string | undefined) || "",
+  email: (import.meta.env.VITE_CONTACT_EMAIL as string | undefined) || "",
   phones: (() => {
     const list = parsePhoneList(import.meta.env.VITE_CONTACT_PHONES as string | undefined);
     if (list.length > 0) return list;
     const single = (import.meta.env.VITE_CONTACT_PHONE as string | undefined)?.trim();
     if (single) return [single];
-    return defaultPhones;
+    return [] as string[];
   })(),
-  address:
-    (import.meta.env.VITE_CONTACT_ADDRESS as string | undefined) || defaultContactAddress,
-  mapsUrl:
-    (import.meta.env.VITE_CONTACT_MAPS as string | undefined) ||
-    mapsSearchUrl(
-      (import.meta.env.VITE_CONTACT_ADDRESS as string | undefined) || defaultContactAddress,
-    ),
+  address: (import.meta.env.VITE_CONTACT_ADDRESS as string | undefined) || "",
+  mapsUrl: (() => {
+    const custom = import.meta.env.VITE_CONTACT_MAPS as string | undefined;
+    if (custom) return custom;
+    const address = (import.meta.env.VITE_CONTACT_ADDRESS as string | undefined) || "";
+    return address ? mapsSearchUrl(address) : "";
+  })(),
 };
+
+export function resolveLandingImage(
+  slot: LandingSlotKey,
+  branding?: BrandingSettings | null,
+): string {
+  const custom = branding?.landingImages?.[slot];
+  if (custom) return custom;
+  return defaultLandingImages[slot];
+}
+
+export function resolveLogoUrl(branding?: BrandingSettings | null): string {
+  return branding?.logoUrl || brandLogo;
+}
+
+export function resolveLogoLandscapeUrl(branding?: BrandingSettings | null): string {
+  return branding?.logoLandscapeUrl || branding?.logoUrl || brandLogoLandscape;
+}

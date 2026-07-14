@@ -130,7 +130,7 @@ export const oauthTranslations = {
         "Κάντε κλικ",
         "\"OK\""
       ],
-      step5Title: "Διαμόρφωση & Δοκιμή PEQI",
+      step5Title: "Διαμόρφωση & Δοκιμή BarberBook",
       step5: [
         "Επικολλήστε το",
         "Client ID",
@@ -443,7 +443,7 @@ export const oauthTranslations = {
         "Click",
         "\"OK\""
       ],
-      step5Title: "Configure & Test PEQI",
+      step5Title: "Configure & Test BarberBook",
       step5: [
         "Paste your",
         "Client ID",

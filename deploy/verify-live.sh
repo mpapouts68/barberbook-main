@@ -1,18 +1,21 @@
 #!/bin/bash
-# Quick check that peqi.hair serves a recent frontend build (run locally or on VPS).
+# Quick check that the live site serves a recent BarberBook frontend build.
 set -euo pipefail
 
-URL="${1:-https://peqi.hair}"
+URL="${1:-}"
+if [[ -z "$URL" ]]; then
+  echo "Usage: bash deploy/verify-live.sh https://your-domain.com"
+  exit 1
+fi
+
 MAX_ATTEMPTS="${VERIFY_LIVE_ATTEMPTS:-5}"
 SLEEP_SEC="${VERIFY_LIVE_SLEEP:-4}"
 
 MARKERS=(
-  "peqibarber@yahoo.com"
-  "peqi_haircut_studio"
-  "haircut_studio"
-  "Sanoudaki"
-  "302897023232"
-  "facebook.com/share"
+  "BarberBook"
+  "Book Your Cut"
+  "bookAppointment"
+  "branding/default-logo"
 )
 
 attempt=1
@@ -54,6 +57,6 @@ while [[ "$attempt" -le "$MAX_ATTEMPTS" ]]; do
   attempt=$((attempt + 1))
 done
 
-echo "STALE: Live site did not match expected PEQI build after ${MAX_ATTEMPTS} attempts."
-echo "      If deploy.log shows 'Built frontend: dist/public/assets/index-....js' and HTTP 200, the app may still be fine — hard-refresh peqi.hair."
+echo "STALE: Live site did not match expected BarberBook build after ${MAX_ATTEMPTS} attempts."
+echo "      If deploy.log shows 'Built frontend: dist/public/assets/index-....js' and HTTP 200, hard-refresh the site."
 exit 1

@@ -1,7 +1,5 @@
-/* Syncfusion Scheduler - BarberBook TV Display theme overrides */
-/* App colors: whiskey #D4A574, charcoal #121212, slate #1a1a1a, steel #2e2e2e */
+/* Syncfusion Scheduler - TV display theme (uses shop branding CSS variables) */
 
-/* Import Syncfusion base (light) - schedule structure visible */
 @import "@syncfusion/ej2-base/styles/bootstrap5.css";
 @import "@syncfusion/ej2-buttons/styles/bootstrap5.css";
 @import "@syncfusion/ej2-calendars/styles/bootstrap5.css";
@@ -11,94 +9,94 @@
 @import "@syncfusion/ej2-popups/styles/bootstrap5.css";
 @import "@syncfusion/ej2-react-schedule/styles/bootstrap5.css";
 
-/* BarberBook: dark schedule container */
 .barberbook-tv-scheduler.e-schedule {
-  background-color: hsl(0, 0%, 12%) !important;
-  border-color: hsl(0, 0%, 22%) !important;
-  color: hsl(0, 0%, 90%) !important;
+  background-color: var(--charcoal) !important;
+  border-color: var(--iron) !important;
+  color: var(--text-primary) !important;
 }
 
-/* Work cells - subtle dark */
 .barberbook-tv-scheduler .e-work-cells,
 .barberbook-tv-scheduler .e-date-header-wrap table tbody td,
 .barberbook-tv-scheduler .e-content-wrap table td {
-  background-color: hsl(0, 0%, 14%) !important;
-  border-color: hsl(0, 0%, 22%) !important;
-  color: hsl(0, 0%, 85%) !important;
+  background-color: var(--slate) !important;
+  border-color: var(--iron) !important;
+  color: var(--text-primary) !important;
 }
 
-/* Time column - whiskey accent text, ensure visible width */
 .barberbook-tv-scheduler .e-left-indent,
 .barberbook-tv-scheduler .e-time-cells-wrap,
 .barberbook-tv-scheduler .e-time-scale,
 .barberbook-tv-scheduler .e-time-cells-wrap table td,
 .barberbook-tv-scheduler .e-scale-cells {
-  background-color: hsl(0, 0%, 16%) !important;
-  border-color: hsl(0, 0%, 22%) !important;
-  color: hsl(42, 47%, 64%) !important;
+  background-color: var(--steel) !important;
+  border-color: var(--iron) !important;
+  color: var(--whiskey) !important;
   min-width: 56px !important;
 }
+
 .barberbook-tv-scheduler .e-left-wrap,
 .barberbook-tv-scheduler .e-left-wrap .e-time-cells-wrap {
   width: auto !important;
   min-width: 56px !important;
 }
 
-/* Header / resource cells */
 .barberbook-tv-scheduler .e-header-cells,
 .barberbook-tv-scheduler .e-resource-header-cells,
 .barberbook-tv-scheduler .e-resource-cells {
-  background-color: hsl(0, 0%, 16%) !important;
-  border-color: hsl(0, 0%, 22%) !important;
-  color: hsl(42, 47%, 64%) !important;
+  background-color: var(--steel) !important;
+  border-color: var(--iron) !important;
+  color: var(--whiskey) !important;
 }
 
 .barberbook-tv-scheduler .e-appointment-wrapper .e-appointment {
-  background: linear-gradient(135deg, hsl(42, 47%, 64%) 0%, hsl(45, 85%, 38%) 100%) !important;
-  color: hsl(0, 0%, 0%) !important;
-  border-color: hsl(42, 47%, 64%) !important;
+  background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%) !important;
+  color: var(--brand-primary-foreground) !important;
+  border-color: var(--brand-primary) !important;
 }
 
 .barberbook-tv-scheduler .e-appointment.e-appointment-border {
-  border-left: 4px solid hsl(42, 47%, 64%) !important;
+  border-left: 4px solid var(--brand-primary) !important;
 }
 
-/* Completed appointments - green tint */
 .barberbook-tv-scheduler .e-appointment.barberbook-completed {
-  background: linear-gradient(135deg, hsl(142, 60%, 35%) 0%, hsl(142, 60%, 25%) 100%) !important;
-  color: white !important;
+  background: linear-gradient(
+    135deg,
+    var(--success) 0%,
+    color-mix(in srgb, var(--success) 70%, var(--charcoal) 30%) 100%
+  ) !important;
+  color: var(--text-primary) !important;
 }
 
-/* Closed period (Διάλειμμα) - gray, not clickable */
 .barberbook-tv-scheduler .e-appointment.barberbook-closed {
-  background: hsl(0, 0%, 22%) !important;
-  color: hsl(0, 0%, 60%) !important;
-  border-left-color: hsl(0, 0%, 35%) !important;
+  background: var(--iron) !important;
+  color: var(--text-muted) !important;
+  border-left-color: var(--border) !important;
   cursor: not-allowed !important;
   opacity: 0.85;
 }
 
-/* Google Calendar events - purple tint */
 .barberbook-tv-scheduler .e-appointment.barberbook-google {
-  background: linear-gradient(135deg, hsl(270, 60%, 40%) 0%, hsl(270, 60%, 30%) 100%) !important;
-  color: white !important;
-  border-left-color: hsl(270, 60%, 60%) !important;
+  background: linear-gradient(
+    135deg,
+    var(--brand-accent) 0%,
+    color-mix(in srgb, var(--brand-accent) 70%, var(--charcoal) 30%) 100%
+  ) !important;
+  color: var(--text-primary) !important;
+  border-left-color: color-mix(in srgb, var(--brand-accent) 80%, white 20%) !important;
 }
 
-/* Cell hover for empty slots - whiskey accent */
 .barberbook-tv-scheduler .e-work-cells:hover {
-  background-color: hsl(42, 47%, 64%, 0.15) !important;
+  background-color: color-mix(in srgb, var(--brand-primary) 15%, transparent) !important;
 }
 
-/* Hide Syncfusion toolbar - we use our own header */
 .barberbook-tv-scheduler .e-schedule-toolbar {
   display: none !important;
 }
 
-/* Hide date row - date is already shown in page header */
 .barberbook-tv-scheduler.e-schedule .e-vertical-view .e-header-cells {
   display: none !important;
 }
+
 .barberbook-tv-scheduler.e-schedule .e-vertical-view .e-date-header-wrap table tbody td.e-resource-cells {
   border-top: none !important;
 }

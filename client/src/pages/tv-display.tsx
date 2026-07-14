@@ -11,7 +11,7 @@ import { Calendar, Clock, User, Scissors, X, ChevronLeft, ChevronRight, Trash2, 
 import { format, addDays, subDays } from "date-fns";
 import { el } from "date-fns/locale";
 import type { Appointment } from "@shared/schema";
-import { brandLogo, brandLogoAlt } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 import { getServiceLabel, getServiceName, resolveServiceName } from "@/lib/serviceLabels";
 import { useLanguage } from "@/context/language-context";
 import {
@@ -124,6 +124,7 @@ function getDayHours(workingHours: any, date: Date): {
 }
 
 export default function TVDisplay() {
+  const { brandLogo, brandLogoAlt, branding } = useBranding();
   const { isEnglish } = useLanguage();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -266,10 +267,10 @@ export default function TVDisplay() {
       activeEmployees.map((emp: any) => ({
         id: emp.id,
         text: emp.name,
-        OwnerColor: "#D4A574", // whiskey
+        OwnerColor: branding.primaryColor,
         avatar: emp.avatar,
       })),
-    [activeEmployees]
+    [activeEmployees, branding.primaryColor]
   );
 
   // Convert appointments to Syncfusion event format

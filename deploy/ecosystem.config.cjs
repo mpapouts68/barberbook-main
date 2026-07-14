@@ -35,7 +35,7 @@ const envFromFile = loadEnvFile(path.join(appRoot, ".env"));
 module.exports = {
   apps: [
     {
-      name: "peqi",
+      name: "barberbook",
       cwd: appRoot,
       script: "dist/index.js",
       instances: 1,

@@ -8,9 +8,10 @@ import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { useLanguage } from "@/context/language-context";
-import { brandLogo, brandLogoAlt } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 
 export default function ForgotPassword() {
+  const { brandLogo, brandLogoAlt } = useBranding();
   const { toast } = useToast();
   const { isEnglish } = useLanguage();
   const [email, setEmail] = useState("");

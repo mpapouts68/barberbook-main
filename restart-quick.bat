@@ -14,7 +14,7 @@ echo Waiting...
 timeout /t 2 /nobreak >nul
 
 echo Starting application...
-echo Server: http://localhost:5000
+echo Server: http://localhost:5100
 echo.
 
 set DATABASE_URL=file:database.sqlite

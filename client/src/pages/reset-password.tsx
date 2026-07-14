@@ -8,9 +8,10 @@ import { useRoute, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { useLanguage } from "@/context/language-context";
-import { brandLogo, brandLogoAlt } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
 
 export default function ResetPassword() {
+  const { brandLogo, brandLogoAlt } = useBranding();
   const [, params] = useRoute("/reset-password/:token");
   const [, setLocation] = useLocation();
   const { toast } = useToast();

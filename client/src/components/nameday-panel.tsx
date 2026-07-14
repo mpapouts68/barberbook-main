@@ -3,12 +3,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { CalendarDays, User, Gift } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import eortologioImg from "@assets/EORTOLOGIO.png";
 import { useLanguage } from "@/context/language-context";
+import { useBranding } from "@/context/branding-context";
 
 const COMPACT_NAME_LIMIT = 5;
 
 export default function NamedayPanel({ compact = false }: { compact?: boolean }) {
+  const { landingImage } = useBranding();
+  const eortologioImg = landingImage("nameday");
   const { isEnglish } = useLanguage();
   const { data: todaysNamedays = [], isLoading } = useQuery({
     queryKey: ["/api/nameday/today"],

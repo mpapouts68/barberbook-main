@@ -22,6 +22,7 @@ import Navbar from "@/components/navbar";
 import NotFound from "@/pages/not-found";
 import { initializePushNotifications } from "@/services/fcm";
 import { LanguageProvider, useLanguage } from "@/context/language-context";
+import { BrandingProvider } from "@/context/branding-context";
 import PublicHeader from "@/components/public-header";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -155,10 +156,12 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <LanguageProvider>
-          <AuthProvider>
-            <Toaster />
-            <AppContent />
-          </AuthProvider>
+          <BrandingProvider>
+            <AuthProvider>
+              <Toaster />
+              <AppContent />
+            </AuthProvider>
+          </BrandingProvider>
         </LanguageProvider>
       </TooltipProvider>
     </QueryClientProvider>

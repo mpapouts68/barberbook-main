@@ -16,12 +16,13 @@ import { FaGoogle, FaFacebook } from "react-icons/fa";
 import { apiRequest } from "@/lib/queryClient";
 import { oauthTranslations } from "@/i18n/oauth-translations";
 import { GoogleOAuthSetupGuide } from "@/components/GoogleOAuthSetupGuide";
-import { brandFullName } from "@/lib/branding";
+import { useBranding } from "@/context/branding-context";
+import { getBrandingFullName } from "@shared/brandingDefaults";
 
 const DEFAULT_BASE_URL =
   typeof window !== "undefined" && window.location.hostname === "localhost"
     ? "http://localhost:5100"
-    : "https://peqi.hair";
+    : "https://your-domain.com";
 
 interface OAuthConfig {
   id?: string;
@@ -39,6 +40,7 @@ interface OAuthConfig {
 export function OAuthSettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { branding } = useBranding();
   const [language, setLanguage] = useState<"el" | "en">("el"); // Default to Greek
 
   const [formData, setFormData] = useState<OAuthConfig>({
@@ -54,6 +56,7 @@ export function OAuthSettings() {
 
   // Use imported translations
   const t = oauthTranslations[language] as typeof oauthTranslations.el;
+  const brandFullName = getBrandingFullName(branding, language === "en");
 
   const { data: config, isLoading } = useQuery<OAuthConfig>({
     queryKey: ["/api/admin/oauth-config"]
@@ -258,7 +261,7 @@ export function OAuthSettings() {
                   type="url"
                   value={formData.baseUrl}
                   onChange={(e) => setFormData(prev => ({ ...prev, baseUrl: e.target.value }))}
-                  placeholder="https://peqi.hair"
+                  placeholder="https://your-shop.com"
                   className="bg-slate border-steel text-white"
                 />
                 <p className="text-sm text-gray-400">
@@ -266,7 +269,7 @@ export function OAuthSettings() {
                 </p>
                 {!formData.baseUrl || formData.baseUrl === "https://your-domain.com" ? (
                   <p className="text-sm text-yellow-400">
-                    ⚠️ Please set your actual domain (e.g., https://peqi.hair)
+                    ⚠️ Please set your actual domain (e.g., https://your-shop.com)
                   </p>
                 ) : null}
               </div>
@@ -443,7 +446,7 @@ export function OAuthSettings() {
                               </div>
                             </li>
                             <li>Click <strong>"Save"</strong> → <strong>"Continue"</strong></li>
-                            <li>You can skip the SDK setup steps (PEQI handles this)</li>
+                            <li>You can skip the SDK setup steps (BarberBook handles this)</li>
                           </ol>
                         </AlertDescription>
                       </Alert>
@@ -571,7 +574,7 @@ export function OAuthSettings() {
                           <ul className="list-disc list-inside ml-4 space-y-1">
                             <li>Update Site URL to: <code className="bg-gray-100 px-1 rounded">https://yourdomain.com</code></li>
                             <li>Add production callback: <code className="bg-gray-100 px-1 rounded">https://yourdomain.com/api/auth/facebook/callback</code></li>
-                            <li>Update Base URL in PEQI Admin to your domain</li>
+                            <li>Update Base URL in Admin → OAuth to your domain</li>
                             <li><strong>Required for Live Mode:</strong> Privacy Policy & Terms URLs</li>
                             <li>Enable <strong>"Enforce HTTPS"</strong> in Facebook Login settings</li>
                             <li>Submit for App Review if using advanced permissions</li>
@@ -642,7 +645,7 @@ export function OAuthSettings() {
                   type="url"
                   value={formData.baseUrl || ""}
                   onChange={(e) => setFormData(prev => ({ ...prev, baseUrl: e.target.value }))}
-                  placeholder="https://peqi.hair"
+                  placeholder="https://your-shop.com"
                   className="bg-slate border-steel text-white font-mono text-lg"
                 />
                 <div className="space-y-2 mt-2">
@@ -659,7 +662,7 @@ export function OAuthSettings() {
                     <Alert className="bg-red-900/20 border-red-600/30">
                       <AlertCircle className="h-4 w-4 text-red-400" />
                       <AlertDescription className="text-red-300 text-sm">
-                        ⚠️ Please set your actual domain! (e.g., https://peqi.hair)
+                        ⚠️ Please set your actual domain! (e.g., https://your-shop.com)
                       </AlertDescription>
                     </Alert>
                   )}

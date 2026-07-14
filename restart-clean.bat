@@ -78,7 +78,7 @@ echo       Ready to start.
 echo.
 echo [7/7] Starting the application...
 echo ========================================
-echo  Server will start on http://localhost:5000
+echo  Server will start on http://localhost:5100
 echo ========================================
 echo.
 
