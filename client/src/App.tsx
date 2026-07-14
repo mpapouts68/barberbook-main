@@ -98,7 +98,7 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-leather">
       {user && <Navbar />}
-      {!user && isPublicAuthRoute && <PublicHeader />}
+      {!user && isPublicAuthRoute && location !== "/" && location !== "/login" && <PublicHeader />}
       
       <Switch>
         {/* Public Routes */}

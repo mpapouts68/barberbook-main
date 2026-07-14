@@ -12,6 +12,7 @@ import { useLanguage } from "@/context/language-context";
 import { useBranding } from "@/context/branding-context";
 import { GUEST_BOOKING_LANGUAGE_KEY } from "@/context/language-context";
 import SocialContactBadges from "@/components/SocialContactBadges";
+import LanguageSwitcher from "@/components/language-switcher";
 import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD } from "@shared/demoDefaults";
 
 export default function Login() {
@@ -127,26 +128,27 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-8 bg-leather">
-      <Card className="max-w-md w-full metal-gradient border-steel shadow-2xl">
-        <CardContent className="p-8">
+    <div className="min-h-screen flex items-center justify-center px-4 py-8 bg-leather relative">
+      <div className="absolute top-4 right-4 z-10">
+        <LanguageSwitcher />
+      </div>
+      <Card className="max-w-xl w-full metal-gradient border-steel shadow-2xl">
+        <CardContent className="p-8 sm:p-10">
           <div className="text-center mb-8">
-            <div className="flex flex-col items-center gap-4 mb-6">
-              <img
-                src={brandLogoLandscape}
-                alt={brandLogoAlt}
-                className="h-14 w-auto max-w-[240px] object-contain"
-              />
-              <img
-                src={brandLogo}
-                alt={brandLogoAlt}
-                className="w-24 h-24 object-contain rounded-full"
-              />
-            </div>
-            <h2 className="font-oswald text-3xl font-bold text-whiskey mb-2">
+            <img
+              src={brandLogoLandscape}
+              alt={brandLogoAlt}
+              className="h-28 sm:h-36 md:h-44 w-auto max-w-[min(100%,28rem)] mx-auto mb-6 object-contain"
+            />
+            <img
+              src={brandLogo}
+              alt={brandLogoAlt}
+              className="w-40 h-40 sm:w-48 sm:h-48 md:w-56 md:h-56 mx-auto object-contain rounded-full"
+            />
+            <h2 className="font-oswald text-3xl sm:text-4xl font-bold text-whiskey mt-6 mb-2">
               {text.title}
             </h2>
-            <p className="text-gray-400">{text.subtitle}</p>
+            <p className="text-gray-400 text-base sm:text-lg">{text.subtitle}</p>
             <SocialContactBadges className="mt-5" />
           </div>
 
