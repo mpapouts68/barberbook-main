@@ -166,5 +166,14 @@
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.8"
+  },
+  "allowScripts": {
+    "better-sqlite3": true,
+    "bcrypt": true,
+    "bufferutil": true,
+    "esbuild": true,
+    "@firebase/util": true,
+    "protobufjs": true,
+    "es5-ext": true
   }
 }
