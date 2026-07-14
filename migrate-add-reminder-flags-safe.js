@@ -19,8 +19,9 @@ console.log('🔧 Adding reminder flags to appointments table...');
 console.log(`📁 Database: ${dbPath}\n`);
 
 if (!fs.existsSync(dbPath)) {
-  console.error(`❌ Database file not found: ${dbPath}`);
-  process.exit(1);
+  console.log(`📁 Database not found — creating: ${dbPath}`);
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  new Database(dbPath).close();
 }
 
 const db = new Database(dbPath);

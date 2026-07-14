@@ -12,8 +12,9 @@ const dbPath = process.env.DATABASE_URL
   : path.join(__dirname, "database.sqlite");
 
 if (!fs.existsSync(dbPath)) {
-  console.error(`Database not found: ${dbPath}`);
-  process.exit(1);
+  console.log(`Database not found — creating: ${dbPath}`);
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  new Database(dbPath).close();
 }
 
 const db = new Database(dbPath);
