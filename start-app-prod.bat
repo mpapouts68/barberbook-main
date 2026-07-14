@@ -33,6 +33,7 @@ if not exist ".env" (
 if not exist "node_modules" call npm ci --include=dev
 
 echo Building...
+set NODE_ENV=production
 call npm run build
 if errorlevel 1 (
   echo [ERROR] Build failed.
