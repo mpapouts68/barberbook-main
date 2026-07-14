@@ -1,25 +1,17 @@
 #!/usr/bin/env node
 /**
- * Runtime DB bootstrap for PaaS (Hostman): create SQLite file, apply base schema, run safe migrations.
- * Do NOT run this during Docker build — only at app start when DATABASE_URL is available.
+ * Runtime DB bootstrap for PaaS (Hostman): pick a writable SQLite path, apply schema, run migrations, start server.
+ * Do NOT run this during Docker build — only at app start.
  */
 import "dotenv/config";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import Database from "better-sqlite3";
+import { resolveDatabaseConfig } from "./resolve-db-path.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function resolveDbPath() {
-  const url = process.env.DATABASE_URL || "file:./database.sqlite";
-  let filePath = url.replace(/^file:/, "").trim();
-  if (!path.isAbsolute(filePath)) {
-    filePath = path.join(root, filePath.replace(/^\.\//, ""));
-  }
-  return filePath;
-}
 
 function tableExists(db, name) {
   return !!db
@@ -27,7 +19,10 @@ function tableExists(db, name) {
     .get(name);
 }
 
-const dbFile = resolveDbPath();
+const { filePath: dbFile, databaseUrl } = resolveDatabaseConfig(root);
+process.env.DATABASE_URL = databaseUrl;
+console.log(`[startup] Using database: ${dbFile}`);
+
 fs.mkdirSync(path.dirname(dbFile), { recursive: true });
 
 if (!fs.existsSync(dbFile)) {
@@ -44,10 +39,7 @@ if (!hasCoreSchema) {
   execSync("npx drizzle-kit push --force", {
     cwd: root,
     stdio: "inherit",
-    env: {
-      ...process.env,
-      DATABASE_URL: process.env.DATABASE_URL || "file:./database.sqlite",
-    },
+    env: { ...process.env, DATABASE_URL: databaseUrl },
   });
 }
 
@@ -64,10 +56,28 @@ const steps = [
 
 for (const step of steps) {
   try {
-    execSync(`npm run ${step}`, { cwd: root, stdio: "inherit", env: process.env });
+    execSync(`npm run ${step}`, {
+      cwd: root,
+      stdio: "inherit",
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    });
   } catch (error) {
     console.warn(`[startup] Migration step "${step}" failed (continuing):`, error.message);
   }
 }
 
-console.log("[startup] Database ready.");
+console.log("[startup] Database ready. Starting server...");
+
+const server = spawn("node", ["dist/index.js"], {
+  cwd: root,
+  stdio: "inherit",
+  env: { ...process.env, DATABASE_URL: databaseUrl },
+});
+
+server.on("exit", (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal);
+    return;
+  }
+  process.exit(code ?? 0);
+});

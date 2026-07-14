@@ -1,5 +1,6 @@
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
 import * as schema from "@shared/schema";
 
@@ -18,6 +19,7 @@ function resolveSqlitePath(databaseUrl: string): string {
 }
 
 const sqlitePath = resolveSqlitePath(process.env.DATABASE_URL);
+fs.mkdirSync(path.dirname(sqlitePath), { recursive: true });
 console.log(`[db] Using SQLite database: ${sqlitePath}`);
 
 const sqlite = new Database(sqlitePath);
