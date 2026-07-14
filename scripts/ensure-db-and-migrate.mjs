@@ -66,6 +66,17 @@ for (const step of steps) {
   }
 }
 
+console.log("[startup] Seeding demo admin, branding, and sample data...");
+try {
+  execSync("npm run seed:demo", {
+    cwd: root,
+    stdio: "inherit",
+    env: { ...process.env, DATABASE_URL: databaseUrl },
+  });
+} catch (error) {
+  console.warn("[startup] Demo seed failed (continuing):", error.message);
+}
+
 console.log("[startup] Database ready. Starting server...");
 
 const server = spawn("node", ["dist/index.js"], {

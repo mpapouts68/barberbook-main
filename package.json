@@ -14,6 +14,7 @@
     "import-namedays": "tsx server/scripts/import-namedays.ts",
     "import-namedays:force": "tsx server/scripts/import-namedays.ts --force",
     "seed": "cross-env DATABASE_URL=file:./database.sqlite tsx server/seed.ts",
+    "seed:demo": "tsx server/seedDemo.ts",
     "check-db": "cross-env DATABASE_URL=file:./database.sqlite tsx server/check-db.ts",
     "verify-db": "cross-env DATABASE_URL=file:./database.sqlite tsx server/verify-db-schema.ts",
     "rebuild-db": "cross-env DATABASE_URL=file:./database.sqlite node scripts/rebuild-database-drizzle.js",

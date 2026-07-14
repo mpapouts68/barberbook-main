@@ -2,7 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Shield } from "lucide-react";
 import { FaGoogle, FaFacebook } from "react-icons/fa";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
@@ -12,14 +12,15 @@ import { useLanguage } from "@/context/language-context";
 import { useBranding } from "@/context/branding-context";
 import { GUEST_BOOKING_LANGUAGE_KEY } from "@/context/language-context";
 import SocialContactBadges from "@/components/SocialContactBadges";
+import { DEMO_ADMIN_EMAIL, DEMO_ADMIN_PASSWORD } from "@shared/demoDefaults";
 
 export default function Login() {
-  const { brandFullName, brandLogo, brandLogoAlt } = useBranding();
+  const { brandFullName, brandLogo, brandLogoLandscape, brandLogoAlt } = useBranding();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { isEnglish } = useLanguage();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(DEMO_ADMIN_EMAIL);
+  const [password, setPassword] = useState(DEMO_ADMIN_PASSWORD);
   const [showPassword, setShowPassword] = useState(false);
 
   const text = {
@@ -47,6 +48,10 @@ export default function Login() {
     guestBookHint: isEnglish
       ? "Name and phone with country code (e.g. +30…) — email optional"
       : "Όνομα και τηλέφωνο με κωδικό χώρας (π.χ. +30…) — το email προαιρετικό",
+    demoTitle: isEnglish ? "Demo admin login" : "Demo σύνδεση admin",
+    demoHint: isEnglish
+      ? "Use the credentials below to explore the admin panel."
+      : "Χρησιμοποιήστε τα στοιχεία παρακάτω για να δείτε το admin panel.",
   };
 
   // Check if OAuth is configured (public endpoint, no auth needed)
@@ -126,11 +131,16 @@ export default function Login() {
       <Card className="max-w-md w-full metal-gradient border-steel shadow-2xl">
         <CardContent className="p-8">
           <div className="text-center mb-8">
-            <div className="w-40 h-40 mx-auto mb-6">
-              <img 
+            <div className="flex flex-col items-center gap-4 mb-6">
+              <img
+                src={brandLogoLandscape}
+                alt={brandLogoAlt}
+                className="h-14 w-auto max-w-[240px] object-contain"
+              />
+              <img
                 src={brandLogo}
                 alt={brandLogoAlt}
-                className="w-full h-full object-contain rounded-full"
+                className="w-24 h-24 object-contain rounded-full"
               />
             </div>
             <h2 className="font-oswald text-3xl font-bold text-whiskey mb-2">
@@ -138,6 +148,23 @@ export default function Login() {
             </h2>
             <p className="text-gray-400">{text.subtitle}</p>
             <SocialContactBadges className="mt-5" />
+          </div>
+
+          <div className="mb-6 rounded-lg border border-whiskey/40 bg-whiskey/5 p-4 text-left">
+            <div className="flex items-center gap-2 text-whiskey font-semibold mb-2">
+              <Shield size={18} />
+              <span>{text.demoTitle}</span>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">{text.demoHint}</p>
+            <div className="space-y-1 text-sm text-gray-200 font-mono">
+              <p>
+                <span className="text-gray-400">Email:</span> {DEMO_ADMIN_EMAIL}
+              </p>
+              <p>
+                <span className="text-gray-400">{isEnglish ? "Password" : "Κωδικός"}:</span>{" "}
+                {DEMO_ADMIN_PASSWORD}
+              </p>
+            </div>
           </div>
 
           <Link

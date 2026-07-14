@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { fileURLToPath } from 'url';
 import { storage } from "./storage";
 import { initializeDatabase } from "./database";
 
@@ -148,7 +149,7 @@ const sampleEmployees = [
   },
 ];
 
-async function seed() {
+async function seedDatabase() {
   try {
     console.log("🌱 Starting database seed...");
     
@@ -229,17 +230,19 @@ async function seed() {
     console.log("✅ Seed completed successfully!");
   } catch (error) {
     console.error("❌ Seed failed:", error);
-    process.exit(1);
+    throw error;
   }
 }
 
-// Run seed if executed directly
-seed().then(() => {
-  process.exit(0);
-}).catch((error) => {
-  console.error("Fatal error:", error);
-  process.exit(1);
-});
+// Run seed if executed directly (not when imported by seedDemo)
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  seedDatabase().then(() => {
+    process.exit(0);
+  }).catch((error) => {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
+}
 
-export { seed };
+export { seedDatabase };
 

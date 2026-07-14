@@ -7,7 +7,7 @@ interface SplashScreenProps {
 }
 
 export default function SplashScreen({ onComplete }: SplashScreenProps) {
-  const { brandLogo, brandLogoAlt, brandName, brandTagline } = useBranding();
+  const { brandLogo, brandLogoLandscape, brandLogoAlt, brandName, brandTagline } = useBranding();
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
@@ -26,8 +26,8 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
       }`}
     >
       <div className="text-center">
-        {/* Logo with animation */}
-        <div className="w-48 h-48 mx-auto mb-8 relative">
+        {/* Round logo */}
+        <div className="w-48 h-48 mx-auto mb-6 relative">
           <div className="absolute inset-0 whiskey-gradient rounded-full opacity-20 animate-ping"></div>
           <div className="relative z-10 w-48 h-48 rounded-full flex items-center justify-center bg-black/30 backdrop-blur-sm">
             <img 
@@ -37,6 +37,13 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
             />
           </div>
         </div>
+
+        {/* Landscape logo */}
+        <img
+          src={brandLogoLandscape}
+          alt={brandLogoAlt}
+          className="h-16 w-auto max-w-[280px] mx-auto mb-6 object-contain"
+        />
         
         {/* Brand name */}
         <h1 className="font-oswald text-4xl font-bold text-whiskey mb-2 animate-pulse-whiskey">
