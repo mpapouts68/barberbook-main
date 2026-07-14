@@ -174,12 +174,23 @@
     color: var(--brand-primary-foreground) !important;
   }
 
+  .login-brand-hero-frame {
+    overflow: hidden;
+    width: min(92vw, 440px);
+    height: clamp(150px, 26vw, 240px);
+    margin-inline: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+  }
+
   .login-brand-hero {
-    width: min(95vw, 560px);
-    max-height: min(70vh, 640px);
+    width: min(92vw, 440px);
     height: auto;
-    object-fit: contain;
     display: block;
+    transform: scale(1.45);
+    transform-origin: center center;
   }
 
   .brand-header {

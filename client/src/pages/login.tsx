@@ -133,13 +133,15 @@ export default function Login() {
         <LanguageSwitcher />
       </div>
       <Card className="max-w-2xl w-full metal-gradient border-steel shadow-2xl">
-        <CardContent className="p-6 sm:p-10">
-          <div className="text-center mb-8">
-            <img
-              src={brandLogoLandscape}
-              alt={brandLogoAlt}
-              className="login-brand-hero mx-auto mb-6"
-            />
+        <CardContent className="px-6 pt-5 pb-6 sm:px-10 sm:pt-6 sm:pb-8">
+          <div className="text-center mb-5">
+            <div className="login-brand-hero-frame mx-auto mb-2">
+              <img
+                src={brandLogoLandscape}
+                alt={brandLogoAlt}
+                className="login-brand-hero"
+              />
+            </div>
             <h2 className="font-oswald text-3xl sm:text-4xl font-bold text-whiskey mb-2">
               {text.title}
             </h2>
