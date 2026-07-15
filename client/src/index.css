@@ -174,23 +174,15 @@
     color: var(--brand-primary-foreground) !important;
   }
 
-  .login-brand-hero-frame {
-    overflow: hidden;
-    width: min(92vw, 440px);
-    height: clamp(150px, 26vw, 240px);
-    margin-inline: auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 0;
-  }
-
   .login-brand-hero {
-    width: min(92vw, 440px);
+    width: min(88vw, 400px);
+    max-height: min(42vh, 340px);
     height: auto;
+    object-fit: contain;
     display: block;
-    transform: scale(1.45);
-    transform-origin: center center;
+    margin-inline: auto;
+    /* Pull in PNG letterboxing without clipping the artwork */
+    margin-block: -0.75rem -0.5rem;
   }
 
   .brand-header {

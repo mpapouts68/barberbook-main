@@ -26,13 +26,11 @@ export default function SplashScreen({ onComplete }: SplashScreenProps) {
       }`}
     >
       <div className="text-center px-6 max-w-xl mx-auto">
-        <div className="login-brand-hero-frame mx-auto mb-4">
-          <img
-            src={brandLogoLandscape}
-            alt={brandLogoAlt}
-            className="login-brand-hero"
-          />
-        </div>
+        <img
+          src={brandLogoLandscape}
+          alt={brandLogoAlt}
+          className="login-brand-hero mb-2"
+        />
 
         <h1 className="font-oswald text-4xl font-bold text-whiskey mb-2 animate-pulse-whiskey">
           {brandName}
